@@ -68,9 +68,9 @@ https://www.desmos.com/calculator/lrbcbfdqjr
 	└── res
 	```
 
-Train with `orig/train.json` and test with `questions/val.json`.
-After prediction, I recommend you to save the result as `results.json` and put that in `arena_data/results/` directory.
-Then you should run the evaluation code with `answers/val.json` and `results/results.json`.
+Train with `orig/train.json` and test with `questions/val.json`.  
+After prediction, I recommend you to save the result as `results.json` and put that in `arena_data/results/` directory.  
+Then you should run the evaluation code with `answers/val.json` and `results/results.json`.  
 This is Arena official github style. I will follow this steps :)  
 
 
