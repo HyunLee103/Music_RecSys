@@ -17,7 +17,8 @@ train
 https://www.desmos.com/calculator/lxdzmg4dun
 
 
-
+  
+  
 ### 2.     val, test : song, tags 빠진 것을 채워넣고  
 
 2.1. title(x), song(O), tags(O) 4190 -> CF (혜린)  
@@ -29,7 +30,8 @@ https://www.desmos.com/calculator/lxdzmg4dun
 2.4. title(O) song(x), tags(x)  809(+2개는 다없음) -> title2tags, title2song -> CF (현)  
 
  
-*100곡(CF) + 400곡(random) -> 셔플 -> rerank -> 100곡 유지정도
+*100곡(CF) + 400곡(random) -> 셔플 -> rerank -> 100곡 유지정도  
+
  
 ### 3.     Rerank : 메타데이터 : Date, 장르, 가수, 플레이리스트 제목, tags, song
 *reranking시 각 곡에 대한 Factorization machine으로 score 계산해보기
