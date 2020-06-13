@@ -44,3 +44,33 @@ https://www.desmos.com/calculator/lrbcbfdqjr
  
 *학습 시 val set은 train에서 split(베이스라인 코드 참고)
 
+## Split data
+1. First, put original `train.json` data in `res/` folder.  
+
+2. Run `split_data.py`
+	```bash
+	>python split_data.py run res/train.json
+	```
+
+3. Check your directory
+	```bash
+	$> tree -d
+	.
+	├── arena_data (new directory!)
+	│   ├── answers
+	│   	├── val.json	# the answer to 'questions/val.json'
+	│   ├── orig
+	│   	├── train.json	# 80% original data
+	│   	├── val.json	# 20% original data
+	│   └── questions
+	│   	├── val.json	# masked data of 'orig/val.json'
+	│   
+	└── res
+	```
+
+Train with `orig/train.json` and test with `questions/val.json`.
+After prediction, I recommend you to save the result as `results.json` and put that in `arena_data/results/` directory.
+Then you should run the evaluation code with `answers/val.json` and `results/results.json`.
+This is Arena official github style. I will follow this steps :)  
+
+
