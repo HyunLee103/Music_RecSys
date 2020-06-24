@@ -118,7 +118,7 @@ class CF:
         res = []
 
         for pid in tqdm(self.plylst_test.index):
-            p = np.zeros((n_songs,1))        # song 개수 만큼 전부 0으로된 array 생성
+            p = np.zeros((self.n_songs,1))        # song 개수 만큼 전부 0으로된 array 생성
             p[self.plylst_test.loc[pid,'songs_id']] = 1    # 이번 test set의 pid ( plyst_id ) 에서, 있는 song_id는 1로 바꿈
 
             val = train_songs_A.dot(p).reshape(-1)  # 같이 있는 개수 val에다가 저장
@@ -126,7 +126,7 @@ class CF:
             songs_already = self.plylst_test.loc[pid, "songs_id"]   # test 셋에 이미 있는 songs_id 저장하기
             tags_already = self.plylst_test.loc[pid, "tags_id"]    # test 셋에 이미 있는 tags_id 저장하기
 
-            cand_song = train_songs_A_T.dot(val)   # 
+            cand_song = train_songs_A_T.dot(val)   # ## score 뽑는 거
             cand_song_idx = cand_song.reshape(-1).argsort()[-song_ntop-50:][::-1]
 
             cand_song_idx = cand_song_idx[np.isin(cand_song_idx, songs_already) == False][:song_ntop]  # songs already에 없는 곡 100개를 가져오기
@@ -141,7 +141,7 @@ class CF:
             res.append({
                         "id": self.plylst_nid_id[pid],
                         "songs": rec_song_idx,
-                        "tags": rec_tag_idx
+                        "tags": rec_tag_idx  # song score랑 tag score 도 저장~
                     })
             
         return res
@@ -151,12 +151,12 @@ class CF:
         res = []
 
         als_model = ALS(factors=128, regularization=0.08, use_gpu=True)
-        als_model.fit(train_songs_A.T * 15.0)   
+        als_model.fit(train_songs_A.T * 15.0)
 
         als_model_tag = ALS(factors=128, regularization=0.08, use_gpu=True)
         als_model_tag.fit(train_tags_A.T * 15.0)
 
-        for pid in tqdm(range(self.n_test)):  ## 한 15분 정도 걸림
+        for pid in tqdm(range(self.n_test)):  ## 한 15분 정도 걸림  ## song tag 있는거 빼셈
             song_rec = als_model.recommend(pid, test_songs_A, N=song_ntop)  # N 이 몇개 추천받을지
             song_rec = [self.song_sid_id[x[0]] for x in song_rec]
             tag_rec = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop)  # N 이 몇개 추천받을지
@@ -183,6 +183,6 @@ class CF:
 if __name__ == "__main__":
 
     a = CF()
-    res = a(mode = 'mf')
+    res = a(mode = 'cf')
 
     # def ncf_(self, train_songs_A, train_tags_A, song_ntop = 500, tag_ntop = 50):
