@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import math
 import os
 import json
 import scipy.sparse as spr  ## sparse matrix 만드는 함수
@@ -10,13 +11,14 @@ from collections import Counter
 from sklearn.utils import shuffle
 from tqdm import tqdm
 from itertools import groupby
-
+from arena_util import write_json
+from evaluate import ArenaEvaluator
 
 class CF:
     def __init__(self):
-        self.train = pd.read_json("arena_data\\orig\\train.json", encoding='utf-8')
-        self.val = pd.read_json("arena_data\\questions\\val.json", encoding='utf-8')
-        self.ans = pd.read_json("arena_data\\answers\\val.json", encoding='utf-8')
+        self.train = pd.read_json("arena_data/orig/train.json", encoding='utf-8')
+        self.val = pd.read_json("arena_data/questions/val.json", encoding='utf-8')
+        self.ans = pd.read_json("arena_data/answers/val.json", encoding='utf-8')
 
         self.train['istrain'] = 1       # train이랑 val의 차이를 넣어놓는 이유 : nid 만들 때 순서대로 전부 새로운 id를 부여하기 때문
         self.val['istrain'] = 0         # 나중에 잘 나누려고~
@@ -76,21 +78,31 @@ class CF:
         if mode == 'cf':
             res = self.cf_(train_songs_A, train_tags_A, 500, 50)
         elif mode == 'mf':
-            res = self.mf_(train_songs_A, train_tags_A, test_songs_A, test_tags_A, 500, 50)
+            res = self.mf_(train_songs_A, train_tags_A, test_songs_A, test_tags_A, 50, 500, 50)
         # elif mode == 'ncf':
         #     res = self.ncf_()
         else:
             print('cf, mf, ncf 중에 하나임')
 
-        self.eval_cf(res)
+        self.eval_rate(res)
+        #self.eval_dcg(res)
 
         return res
+
+    def rating(self,num,mode):
+        if mode =='train':
+            constant = 8.66
+        else: #mode =='test':
+            constant = 7.66
+
+        return [-math.log(x+1,2)+constant for x in range(num)]
 
     def mkspr(self, train, val):
 
         row = np.repeat(range(self.n_train), self.plylst_train['num_songs']) # range => id 라서 id를 songs 개수만큼 반복한게 row로 사용
         col = [song for songs in self.plylst_train['songs_id'] for song in songs]  # 모든 plyst의 songs를 순서대로 쭉~
-        dat = np.repeat(1, self.plylst_train['num_songs'].sum())        # song 개수 만큼 1을 쭉~
+        dat_series = self.plylst_train['num_songs'].map(lambda x: self.rating(x,'train'))
+        dat = [y for x in dat_series for y in x] 
         train_songs_A = spr.csr_matrix((dat, (row, col)), shape=(self.n_train, self.n_songs)) # matrix 생성
 
         row = np.repeat(range(self.n_train), self.plylst_train['num_tags'])
@@ -100,7 +112,8 @@ class CF:
 
         row = np.repeat(range(self.n_test), self.plylst_test['num_songs']) # range => id 라서 id를 songs 개수만큼 반복한게 row로 사용
         col = [song for songs in self.plylst_test['songs_id'] for song in songs]  # 모든 plyst의 songs를 순서대로 쭉~
-        dat = np.repeat(1, self.plylst_test['num_songs'].sum())        # song 개수 만큼 1을 쭉~
+        dat_series = self.plylst_test['num_songs'].map(lambda x: self.rating(x,'test'))
+        dat = [y for x in dat_series for y in x] 
         test_songs_A = spr.csr_matrix((dat, (row, col)), shape=(self.n_test, self.n_songs))
 
         row = np.repeat(range(self.n_test), self.plylst_test['num_tags'])
@@ -126,63 +139,89 @@ class CF:
             songs_already = self.plylst_test.loc[pid, "songs_id"]   # test 셋에 이미 있는 songs_id 저장하기
             tags_already = self.plylst_test.loc[pid, "tags_id"]    # test 셋에 이미 있는 tags_id 저장하기
 
-            cand_song = train_songs_A_T.dot(val)   # ## score 뽑는 거
+            cand_song = train_songs_A_T.dot(val)   # 곡 별 점수
+            cand_song = np.ravel(cand_song,order="C")
             cand_song_idx = cand_song.reshape(-1).argsort()[-song_ntop-50:][::-1]
 
             cand_song_idx = cand_song_idx[np.isin(cand_song_idx, songs_already) == False][:song_ntop]  # songs already에 없는 곡 100개를 가져오기
             rec_song_idx = [self.song_sid_id[i] for i in cand_song_idx]  # song id 가져오기
+            rec_song_score = [cand_song[i] for i in cand_song_idx]
 
-            cand_tag = train_tags_A_T.dot(val)
+            cand_tag = train_tags_A_T.dot(val) # 태그 별 점수
+            cand_tag = np.ravel(cand_tag,order="C")
             cand_tag_idx = cand_tag.reshape(-1).argsort()[-tag_ntop-5:][::-1]
 
             cand_tag_idx = cand_tag_idx[np.isin(cand_tag_idx, tags_already) == False][:tag_ntop]
             rec_tag_idx = [self.tag_tid_id[i] for i in cand_tag_idx]
+            rec_tag_score = [cand_tag[i] for i in cand_tag_idx]
 
             res.append({
                         "id": self.plylst_nid_id[pid],
                         "songs": rec_song_idx,
-                        "tags": rec_tag_idx  # song score랑 tag score 도 저장~
+                        "tags": rec_tag_idx,
+                        "songs_score":rec_song_score,
+                        "tags_score":rec_tag_score
                     })
             
         return res
 
-    def mf_(self, train_songs_A, train_tags_A, test_songs_A, test_tags_A, song_ntop = 500, tag_ntop = 50):
+    def mf_(self, train_songs_A, train_tags_A, test_songs_A, test_tags_A, epoch, song_ntop = 500, tag_ntop = 50):
         
+        print(f'epoch:{epoch}')
         res = []
 
         als_model = ALS(factors=128, regularization=0.08, use_gpu=True)
-        als_model.fit(train_songs_A.T * 15.0)
+        als_model.fit(train_songs_A.T * epoch)   
 
         als_model_tag = ALS(factors=128, regularization=0.08, use_gpu=True)
-        als_model_tag.fit(train_tags_A.T * 15.0)
+        als_model_tag.fit(train_tags_A.T * epoch)
 
-        for pid in tqdm(range(self.n_test)):  ## 한 15분 정도 걸림  ## song tag 있는거 빼셈
-            song_rec = als_model.recommend(pid, test_songs_A, N=song_ntop)  # N 이 몇개 추천받을지
-            song_rec = [self.song_sid_id[x[0]] for x in song_rec]
-            tag_rec = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop)  # N 이 몇개 추천받을지
-            tag_rec = [self.tag_tid_id[x[0]] for x in tag_rec]
+        for pid in tqdm(range(self.n_test)):  ## 한 15분 정도 걸림
+            song_rec = als_model.recommend(pid, test_songs_A, N=song_ntop)  # N 이 몇 개 추천받을지
+            tag_rec = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop)  # N 이 몇 개 추천받을지
+ 
+            # 튜플 곡, 점수로 분리
+            rec_song_idx = [self.song_sid_id[x[0]] for x in song_rec]
+            rec_song_score = [x[1] for x in song_rec]
+            rec_tag_idx = [self.tag_tid_id[x[0]] for x in tag_rec]
+            rec_tag_score = [x[1] for x in tag_rec]
 
             res.append({
-                        "id": self.plylst_nid_id[pid],
-                        "songs": song_rec,
-                        "tags": tag_rec
+                        "id": self.plylst_nid_id[pid+self.n_train],
+                        "songs": rec_song_idx, 
+                        "tags": rec_tag_idx,
+                        "songs_score":rec_song_score,
+                        "tags_score":rec_tag_score
                     })
 
         return res
 
-    def eval_cf(self, res):
-        predict = pd.DataFrame(res)
+    def eval_rate(self, res):
+        predict = pd.DataFrame(res)[['id','songs','tags']]
         answer = self.ans[['id', 'songs', 'tags']]
+      
+        # compare = pd.merge(predict,answer,how='left',on='id') > 에러..
+        predict[['songs_ans','tags_ans']] = answer[['songs','tags']]
 
-        correct_song = [song for i, songs in enumerate(range(predict['songs'])) for song in songs if song in answer['songs'].iloc[i]]
-        correct_tag = [song for i, songs in enumerate(range(predict['tags'])) for song in songs if song in answer['tags'].iloc[i]]
+        predict['correct_songs']= predict.apply(lambda x:len(set(x['songs'])&set(x['songs_ans']))/len(x['songs_ans']) * 100, axis=1)
+        predict['correct_tags'] = predict.apply(lambda x:len(set(x['tags'])&set(x['tags_ans']))/len(x['tags_ans']) * 100, axis=1)
 
-        print(round(correct_song.__len__() / sum(answer['songs'].map(len)) * 100, 2), "%")
-        print(round(correct_tag.__len__() / sum(answer['tags'].map(len)) * 100, 2), "%")
+        correct_songs = predict.loc[:,"correct_songs"].mean()
+        correct_tags = predict.loc[:,"correct_tags"].mean()
+
+        print(f"Songs: {correct_songs:.3}%")
+        print(f"Tags: {correct_tags:.3}%")
+
+
+    def eval_dcg(self,res):
+        write_json(res,"results/results.json")
+        evaluator = ArenaEvaluator()
+        evaluator.evaluate(self.ans, "arena_data/results/results.json")
+
 
 if __name__ == "__main__":
 
     a = CF()
-    res = a(mode = 'cf')
+    res = a(mode = 'mf')
 
     # def ncf_(self, train_songs_A, train_tags_A, song_ntop = 500, tag_ntop = 50):
