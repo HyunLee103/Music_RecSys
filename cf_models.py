@@ -78,7 +78,7 @@ class CF:
         if mode == 'cf':
             res = self.cf_(train_songs_A, train_tags_A, 500, 50)
         elif mode == 'mf':
-            res = self.mf_(train_songs_A, train_tags_A, test_songs_A, test_tags_A, iteration=50, 500, 50)
+            res = self.mf_(train_songs_A, train_tags_A, test_songs_A, test_tags_A, 50, 500, 50)
         # elif mode == 'ncf':
         #     res = self.ncf_()
         else:
@@ -167,7 +167,7 @@ class CF:
 
     def mf_(self, train_songs_A, train_tags_A, test_songs_A, test_tags_A, iteration, song_ntop = 500, tag_ntop = 50):
         
-        print(f'epoch:{epoch}')
+        print(f'epoch:{iteration}')
         res = []
 
         als_model = ALS(factors=128, regularization=0.08, iterations=iteration,use_gpu=True)
