@@ -78,7 +78,7 @@ class CF:
         if mode == 'cf':
             res = self.cf_(train_songs_A, train_tags_A, 500, 50)
         elif mode == 'mf':
-            res = self.mf_(train_songs_A, train_tags_A, test_songs_A, test_tags_A, 50, 500, 50)
+            res = self.mf_(train_songs_A, train_tags_A, test_songs_A, test_tags_A, iteration=50, 500, 50)
         # elif mode == 'ncf':
         #     res = self.ncf_()
         else:
@@ -165,16 +165,16 @@ class CF:
             
         return res
 
-    def mf_(self, train_songs_A, train_tags_A, test_songs_A, test_tags_A, epoch, song_ntop = 500, tag_ntop = 50):
+    def mf_(self, train_songs_A, train_tags_A, test_songs_A, test_tags_A, iteration, song_ntop = 500, tag_ntop = 50):
         
         print(f'epoch:{epoch}')
         res = []
 
-        als_model = ALS(factors=128, regularization=0.08, use_gpu=True)
-        als_model.fit(train_songs_A.T * epoch)   
+        als_model = ALS(factors=128, regularization=0.08, iterations=iteration,use_gpu=True)
+        als_model.fit(train_songs_A.T)   
 
-        als_model_tag = ALS(factors=128, regularization=0.08, use_gpu=True)
-        als_model_tag.fit(train_tags_A.T * epoch)
+        als_model_tag = ALS(factors=128, regularization=0.08, iterations=iteration ,use_gpu=True)
+        als_model_tag.fit(train_tags_A.T)
 
         for pid in tqdm(range(self.n_test)):  ## 한 15분 정도 걸림
             song_rec = als_model.recommend(pid, test_songs_A, N=song_ntop)  # N 이 몇 개 추천받을지
