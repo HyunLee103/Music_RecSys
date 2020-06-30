@@ -183,37 +183,41 @@ remove 0 or 1 length. (1 has no context)
 
 
 titles, vectors = embed.song_based(keyedvector=False)
-len(titles)
+
+
 class Title2Rec:
     def __init__(self):
         super().__init__()
-        self.model = None
+        self.cluster_model = None
         self.fasttext = None
-
+        self.t2r = None
+        
     def fit_clustering(self, vectors,
                    n_clusters, verbose=0, max_iter=50):
-        self.model = KMeans(n_clusters=n_clusters, verbose=verbose,
+        self.cluster_model = KMeans(n_clusters=n_clusters, verbose=verbose,
                             max_iter=max_iter)
         print("Data length: ", len(vectors))
-        print("Fitting...")
-        self.model.fit(vectors)
+        print("Fit KMeans...")
+        self.cluster_model.fit(vectors)
         print("done.")
         
     @staticmethod
     def preprocess_clustering(titles, vectors, ID=True):
         if ID:
+            id_list = list(map(lambda x: x.split(' ')[0][1:-1], titles))
             titles = list(map(lambda x: ' '.join(x.split(' ')[1:]), titles))
-        t_v = list(zip(titles, vectors))
-        stable = [(t, v) for t, v in t_v if re.findall('[가-힣a-zA-Z&]+', t) != []]
-        stable = [(' '.join(re.findall('[가-힣a-zA-Z&]+|90|80|70', t)), v) for t, v in stable]
-        stable = [(t, v) for t, v in stable if t != '']
-        titles = [t for t, v in stable]
-        vectors = [v for t, v in stable]
+        t_v = list(zip(titles, vectors, id_list))
+        stable = [(t, v, i) for t, v, i in t_v if re.findall('[가-힣a-zA-Z&]+', t) != []]
+        stable = [(' '.join(re.findall('[가-힣a-zA-Z&]+|90|80|70', t)), v, i) for t, v, i in stable]
+        stable = [(t, v, i) for t, v, i in stable if t != '']
+        titles = [t for t, v, i in stable]
+        vectors = [v for t, v, i in stable]
+        id_list = [i for t, v, i in stable]
         print("Original lenght: ", len(t_v))
         print("Processed length: ", len(titles))
         
-        return titles, vectors
-        
+        return titles, vectors, id_list
+   
     @staticmethod
     def text_process(titles, ID=True):
         if ID:
@@ -228,39 +232,47 @@ class Title2Rec:
         return stable
 
     def pre_fasttext(self, titles, vectors):
-        cluster_out = self.model.predict(vectors)
-        transform = self.model.transform(vectors)
+        if not self.cluster_model:
+            raise RuntimeError("Please fit clustering model.")
+        cluster_out = self.cluster_model.predict(vectors)
+        transform = self.cluster_model.transform(vectors)
         dist = [distance[cluster] for cluster, distance in zip(cluster_out, transform)]
         data = pd.DataFrame({'title': titles,
-                      'cluster': cluster_out,
-                      'distance': dist})
+                             'cluster': cluster_out,
+                             'distance': dist})
         return data.sort_values(['cluster', 'distance'])
     
     def fit_fasttext(self, data):
         sentence = data.groupby('cluster')['title'].apply(list).tolist()
-        print("fitting...")
+        print("Fit fasttext...")
         self.fasttext = FastText(sentence)
         print('done.')
         
-    def get_result(self, data):
-        title = [p['plylst_title'] for p in data]
-        ID = [str(p['id']) + p['plylst_title'] for p in data]
-        title, ID = self.preprocess_clustering(title, ID, ID=False)
-        vectors = list(map(self.fasttext.wv.get_vector, title))
-        out = WordEmbeddingsKeyedVectors(vector_size=100)
-        out.add(ID, vectors)
-        
+    def fit_title2rec(self, titles, ID):
+        keys = [i + " " + t for t, i in zip(titles, ID)]
+        print('Fit title2rec...')
+        vectors = list(map(self.fasttext.wv.get_vector, titles))
+        self.t2r = WordEmbeddingsKeyedVectors(vector_size=100)
+        self.t2r.add(keys, vectors)
+        print('done.')
+    
+    def forward(self, titles, topn=10):
+        ft = list(map(self.fasttext.wv.get_vector, titles))
+        out = [self.t2r.wv.similar_by_vector(t, topn=topn) for t in ft]
         return out
 
 t2r = Title2Rec()
 
-t, v = Title2Rec.preprocess_clustering(titles, vectors, ID=True)
+t, v, ID = Title2Rec.preprocess_clustering(titles, vectors, ID=True)
 
-t2r.fit_clustering(v[:10000], n_clusters=100)
 
-data = t2r.pre_fasttext(t[:10000], v[:10000])
+t2r.fit_clustering(v[:1000], n_clusters=200)
+
+data = t2r.pre_fasttext(t[:1000], v[:1000])
+
 t2r.fit_fasttext(data)
-title2rec = t2r.get_result(train)
+t2r.fit_title2rec(t, ID)
 
-title2rec.wv.similar_by_vector(t2r.fasttext.wv.get_vector('R&B에 푹 빠져보자'))
+similar = t2r.forward(['기분좋은 봄날', '뜨거운 여름밤'])
+
 
