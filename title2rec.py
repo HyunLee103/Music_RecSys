@@ -15,6 +15,11 @@ import pickle
 import re
 from collections import Counter
 
+"""
+class PlyEmbedding -> 플레이리스트 들어가서 플레이리스트 마다 일정하게 벡터가 부여된다.
+
+class Title2Rec -> 벡터가 부여된 타이틀이 들어가서 cluster, fasttext, T2R
+"""
 
 class PlyEmbedding:
     """
@@ -134,7 +139,7 @@ train = load_json(train_path)
 
 embed = PlyEmbedding(train)
 
-# make song2vec & doc2vec
+# make Word2vec & Doc2vec
 embed.make_s2v()
 embed.make_d2v()
 
@@ -143,6 +148,8 @@ s2v_sum = embed.song_based(mode='s2v', by='sum', keyedvector=True)
 s2v_mean = embed.song_based(mode='s2v', by='mean', keyedvector=True)
 d2v_sum = embed.song_based(mode='d2v', by='sum', keyedvector=True)
 d2v_mean = embed.song_based(mode='d2v', by='mean', keyedvector=True)
+
+s2v_mean.wv.similar_by_vector(np.ones(100))
 
 # check the result.
 def p2v_test(data, num, m1, m2):
@@ -263,16 +270,52 @@ class Title2Rec:
 
 t2r = Title2Rec()
 
+"""
+1. 제목에 영어와 완전한 한글만 있는거(ex.2019.02.23, 123231-1, ㅋㅋ, ㅎㅎ, ^^, (하트하트))
+2. 숫자와 특수문자 제거 (ex. 크리스마스 223) - 70, 80, 90 만 넣기
+"""
 t, v, ID = Title2Rec.preprocess_clustering(titles, vectors, ID=True)
 
 
-t2r.fit_clustering(v[:1000], n_clusters=200)
+t2r.fit_clustering(v[:10000], n_clusters=200)
 
-data = t2r.pre_fasttext(t[:1000], v[:1000])
+data = t2r.pre_fasttext(t[:10000], v[:10000])
 
 t2r.fit_fasttext(data)
 t2r.fit_title2rec(t, ID)
 
-similar = t2r.forward(['기분좋은 봄날', '뜨거운 여름밤'])
+similar = t2r.forward(['ㄻㅇㄹ '])
+similar[0]
+
+"""
+input: titles, n_song
+
+T2R로 채워 넣을 곡 개수: ? (아마 30~40개) -> 이것도 input.
+
+1. 현상황. title이 들어가면 근처 플레이리스트 n개를 train셋에서 찾아준다.
+ - 라디오 63개.
+
+1이면 다 넣어.
+ 
+ a. n 개의 플레이리스트를 뽑는경우
+    - n을 초과하게 거리가 1인 플레이리스트가 있는 경우.
+       - like cnt로 sort해서 n개. 
+       
+ b. 거리의 threadhold. th <th> 이상
+    - 한개도 안나올 수가 있다. -> 제일가까운거 하나만. input곡이 안되면 다음 것까지
+    - 엄청 많이 나올 수도 있다.'
+    
+ c. input의 10배 곡 개수가 나올 때까지 플레이리스트 넘기기.
 
 
+2. 플레이리스트는 찾았다. 곡은 어떻게 sorting 할 것인가?
+   확정. 현 교수 공식 -> 유사도 곱하기 -> 더하기 -> sort
+ 
+3. 형태소분석 (형, 명, 부) 
+ 
+4. 평가방법
+ - 제목만 있는 플레이리스트에 most_popular vs T2R
+ 
+
+&*@#&*$ <<<태그 가져오는 것도 잊지 말자>>> ^&#*^
+"""
