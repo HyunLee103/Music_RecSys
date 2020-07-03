@@ -15,6 +15,11 @@ import pickle
 import re
 from collections import Counter
 
+"""
+class PlyEmbedding -> 플레이리스트 들어가서 플레이리스트 마다 일정하게 벡터가 부여된다.
+
+class Title2Rec -> 벡터가 부여된 타이틀이 들어가서 cluster, fasttext, T2R
+"""
 
 class PlyEmbedding:
     """
@@ -134,7 +139,7 @@ train = load_json(train_path)
 
 embed = PlyEmbedding(train)
 
-# make song2vec & doc2vec
+# make Word2vec & Doc2vec
 embed.make_s2v()
 embed.make_d2v()
 
@@ -143,6 +148,8 @@ s2v_sum = embed.song_based(mode='s2v', by='sum', keyedvector=True)
 s2v_mean = embed.song_based(mode='s2v', by='mean', keyedvector=True)
 d2v_sum = embed.song_based(mode='d2v', by='sum', keyedvector=True)
 d2v_mean = embed.song_based(mode='d2v', by='mean', keyedvector=True)
+
+s2v_mean.wv.similar_by_vector(np.ones(100))
 
 # check the result.
 def p2v_test(data, num, m1, m2):
@@ -183,37 +190,41 @@ remove 0 or 1 length. (1 has no context)
 
 
 titles, vectors = embed.song_based(keyedvector=False)
-len(titles)
+
+
 class Title2Rec:
     def __init__(self):
         super().__init__()
-        self.model = None
+        self.cluster_model = None
         self.fasttext = None
-
+        self.t2r = None
+        
     def fit_clustering(self, vectors,
                    n_clusters, verbose=0, max_iter=50):
-        self.model = KMeans(n_clusters=n_clusters, verbose=verbose,
+        self.cluster_model = KMeans(n_clusters=n_clusters, verbose=verbose,
                             max_iter=max_iter)
         print("Data length: ", len(vectors))
-        print("Fitting...")
-        self.model.fit(vectors)
+        print("Fit KMeans...")
+        self.cluster_model.fit(vectors)
         print("done.")
         
     @staticmethod
     def preprocess_clustering(titles, vectors, ID=True):
         if ID:
+            id_list = list(map(lambda x: x.split(' ')[0][1:-1], titles))
             titles = list(map(lambda x: ' '.join(x.split(' ')[1:]), titles))
-        t_v = list(zip(titles, vectors))
-        stable = [(t, v) for t, v in t_v if re.findall('[가-힣a-zA-Z&]+', t) != []]
-        stable = [(' '.join(re.findall('[가-힣a-zA-Z&]+|90|80|70', t)), v) for t, v in stable]
-        stable = [(t, v) for t, v in stable if t != '']
-        titles = [t for t, v in stable]
-        vectors = [v for t, v in stable]
+        t_v = list(zip(titles, vectors, id_list))
+        stable = [(t, v, i) for t, v, i in t_v if re.findall('[가-힣a-zA-Z&]+', t) != []]
+        stable = [(' '.join(re.findall('[가-힣a-zA-Z&]+|90|80|70', t)), v, i) for t, v, i in stable]
+        stable = [(t, v, i) for t, v, i in stable if t != '']
+        titles = [t for t, v, i in stable]
+        vectors = [v for t, v, i in stable]
+        id_list = [i for t, v, i in stable]
         print("Original lenght: ", len(t_v))
         print("Processed length: ", len(titles))
         
-        return titles, vectors
-        
+        return titles, vectors, id_list
+   
     @staticmethod
     def text_process(titles, ID=True):
         if ID:
@@ -228,39 +239,83 @@ class Title2Rec:
         return stable
 
     def pre_fasttext(self, titles, vectors):
-        cluster_out = self.model.predict(vectors)
-        transform = self.model.transform(vectors)
+        if not self.cluster_model:
+            raise RuntimeError("Please fit clustering model.")
+        cluster_out = self.cluster_model.predict(vectors)
+        transform = self.cluster_model.transform(vectors)
         dist = [distance[cluster] for cluster, distance in zip(cluster_out, transform)]
         data = pd.DataFrame({'title': titles,
-                      'cluster': cluster_out,
-                      'distance': dist})
+                             'cluster': cluster_out,
+                             'distance': dist})
         return data.sort_values(['cluster', 'distance'])
     
     def fit_fasttext(self, data):
         sentence = data.groupby('cluster')['title'].apply(list).tolist()
-        print("fitting...")
+        print("Fit fasttext...")
         self.fasttext = FastText(sentence)
         print('done.')
         
-    def get_result(self, data):
-        title = [p['plylst_title'] for p in data]
-        ID = [str(p['id']) + p['plylst_title'] for p in data]
-        title, ID = self.preprocess_clustering(title, ID, ID=False)
-        vectors = list(map(self.fasttext.wv.get_vector, title))
-        out = WordEmbeddingsKeyedVectors(vector_size=100)
-        out.add(ID, vectors)
-        
+    def fit_title2rec(self, titles, ID):
+        keys = [i + " " + t for t, i in zip(titles, ID)]
+        print('Fit title2rec...')
+        vectors = list(map(self.fasttext.wv.get_vector, titles))
+        self.t2r = WordEmbeddingsKeyedVectors(vector_size=100)
+        self.t2r.add(keys, vectors)
+        print('done.')
+    
+    def forward(self, titles, topn=10):
+        ft = list(map(self.fasttext.wv.get_vector, titles))
+        out = [self.t2r.wv.similar_by_vector(t, topn=topn) for t in ft]
         return out
 
 t2r = Title2Rec()
 
-t, v = Title2Rec.preprocess_clustering(titles, vectors, ID=True)
+"""
+1. 제목에 영어와 완전한 한글만 있는거(ex.2019.02.23, 123231-1, ㅋㅋ, ㅎㅎ, ^^, (하트하트))
+2. 숫자와 특수문자 제거 (ex. 크리스마스 223) - 70, 80, 90 만 넣기
+"""
+t, v, ID = Title2Rec.preprocess_clustering(titles, vectors, ID=True)
 
-t2r.fit_clustering(v[:10000], n_clusters=100)
+
+t2r.fit_clustering(v[:10000], n_clusters=200)
 
 data = t2r.pre_fasttext(t[:10000], v[:10000])
+
 t2r.fit_fasttext(data)
-title2rec = t2r.get_result(train)
+t2r.fit_title2rec(t, ID)
 
-title2rec.wv.similar_by_vector(t2r.fasttext.wv.get_vector('R&B에 푹 빠져보자'))
+similar = t2r.forward(['ㄻㅇㄹ '])
+similar[0]
 
+"""
+input: titles, n_song
+
+T2R로 채워 넣을 곡 개수: ? (아마 30~40개) -> 이것도 input.
+
+1. 현상황. title이 들어가면 근처 플레이리스트 n개를 train셋에서 찾아준다.
+ - 라디오 63개.
+
+1이면 다 넣어.
+ 
+ a. n 개의 플레이리스트를 뽑는경우
+    - n을 초과하게 거리가 1인 플레이리스트가 있는 경우.
+       - like cnt로 sort해서 n개. 
+       
+ b. 거리의 threadhold. th <th> 이상
+    - 한개도 안나올 수가 있다. -> 제일가까운거 하나만. input곡이 안되면 다음 것까지
+    - 엄청 많이 나올 수도 있다.'
+    
+ c. input의 10배 곡 개수가 나올 때까지 플레이리스트 넘기기.
+
+
+2. 플레이리스트는 찾았다. 곡은 어떻게 sorting 할 것인가?
+   확정. 현 교수 공식 -> 유사도 곱하기 -> 더하기 -> sort
+ 
+3. 형태소분석 (형, 명, 부) 
+ 
+4. 평가방법
+ - 제목만 있는 플레이리스트에 most_popular vs T2R
+ 
+
+&*@#&*$ <<<태그 가져오는 것도 잊지 말자>>> ^&#*^
+"""
