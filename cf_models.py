@@ -164,7 +164,8 @@ class CF:
                         "tags_score":rec_tag_score
                     })
             
-        return res # test(23000여개) > 약 6분 소요. song) 30.2% , tag) 29.3% (바꾼 기준 하에서)     
+        return res 
+        # test(23000여개) > 약 6분 소요. song) 30.2% , tag) 29.3% (바꾼 기준 하에서)     
 
     def mf_(self, train_songs_A, train_tags_A, test_songs_A, test_tags_A, iteration, song_ntop = 500, tag_ntop = 50):
         
