@@ -84,7 +84,7 @@ class CF:
         else:
             print('cf, mf, ncf 중에 하나임')
 
-        self.eval_rate(res)
+        #self.eval_rate(res)
         #self.eval_dcg(res)
 
         return res
@@ -123,57 +123,58 @@ class CF:
 
         return train_songs_A, train_tags_A, test_songs_A, test_tags_A
 
-    def cf_(self, train_songs_A, train_tags_A, song_ntop = 500, tag_ntop = 50):
+    def cf_(self, train_songs_A, train_tags_A,test_songs_A,test_tags_A, song_ntop = 500, tag_ntop = 50):
 
-        train_songs_A_T = train_songs_A.T.tocsr()
-        train_tags_A_T = train_tags_A.T.tocsr()
+        train_songs_A_T = train_songs_A.T.tocsr() # shape) n_songs * n_train ply
+        train_tags_A_T = train_tags_A.T.tocsr() # shape) n_tags * n_train ply
 
         res = []
 
-        for pid in tqdm(self.plylst_test.index):
-            p = np.zeros((self.n_songs,1))        # song 개수 만큼 전부 0으로된 array 생성
-            p[self.plylst_test.loc[pid,'songs_id']] = 1    # 이번 test set의 pid ( plyst_id ) 에서, 있는 song_id는 1로 바꿈
+        song_val = test_songs_A.dot(train_songs_A_T) # n_test * n_train
+        tag_val = test_tags_A.dot(train_tags_A_T)
 
-            val = train_songs_A.dot(p).reshape(-1)  # 같이 있는 개수 val에다가 저장
+        cand_song_matrix = song_val.dot(train_songs_A) # n_test * n_songs
+        cand_tag_matrix = tag_val.dot(train_tags_A)
 
-            songs_already = self.plylst_test.loc[pid, "songs_id"]   # test 셋에 이미 있는 songs_id 저장하기
-            tags_already = self.plylst_test.loc[pid, "tags_id"]    # test 셋에 이미 있는 tags_id 저장하기
+        del song_val
+        del tag_val
 
-            cand_song = train_songs_A_T.dot(val)   # 곡 별 점수
-            cand_song = np.ravel(cand_song,order="C")
-            cand_song_idx = cand_song.reshape(-1).argsort()[-song_ntop-50:][::-1]
+        for r,pid in tqdm(enumerate(self.plylst_test.index),0):
 
-            cand_song_idx = cand_song_idx[np.isin(cand_song_idx, songs_already) == False][:song_ntop]  # songs already에 없는 곡 100개를 가져오기
-            rec_song_idx = [self.song_sid_id[i] for i in cand_song_idx]  # song id 가져오기
-            rec_song_score = [cand_song[i] for i in cand_song_idx]
+            songs_already = self.plylst_test.loc[pid, "songs_id"]
+            tags_already = self.plylst_test.loc[pid, "tags_id"] 
 
-            cand_tag = train_tags_A_T.dot(val) # 태그 별 점수
-            cand_tag = np.ravel(cand_tag,order="C")
-            cand_tag_idx = cand_tag.reshape(-1).argsort()[-tag_ntop-5:][::-1]
+            song_row = cand_song_matrix.getrow(r).toarray().reshape(-1,) # 1 * n_songs > 점수 행렬 
+            cand_song_idx = song_row.argsort()[-song_ntop-50:][::-1] # 점수 순 idx(= 곡 sid) sort
+
+            cand_song_idx = cand_song_idx[np.isin(cand_song_idx, songs_already) == False][:song_ntop] # 원래 있던 곡 제외, 상위 n개
+            rec_song_score = [song_row[i] for i in cand_song_idx]
+
+            tag_row = cand_tag_matrix.getrow(r).toarray().reshape(-1,) 
+            cand_tag_idx = tag_row.argsort()[-tag_ntop-5:][::-1]
 
             cand_tag_idx = cand_tag_idx[np.isin(cand_tag_idx, tags_already) == False][:tag_ntop]
-            rec_tag_idx = [self.tag_tid_id[i] for i in cand_tag_idx]
-            rec_tag_score = [cand_tag[i] for i in cand_tag_idx]
+            rec_tag_score = [tag_row.data[i] for i in cand_tag_idx]
 
             res.append({
                         "id": self.plylst_nid_id[pid],
-                        "songs": rec_song_idx,
-                        "tags": rec_tag_idx,
+                        "songs": [self.song_sid_id[i] for i in cand_song_idx], #sid
+                        "tags": [self.tag_tid_id[i] for i in cand_tag_idx],  #tid
                         "songs_score":rec_song_score,
                         "tags_score":rec_tag_score
                     })
             
-        return res
+        return res # test(23000여개) > 약 6분 소요. song) 30.2% , tag) 29.3% (바꾼 기준 하에서)     
 
     def mf_(self, train_songs_A, train_tags_A, test_songs_A, test_tags_A, iteration, song_ntop = 500, tag_ntop = 50):
         
-        print(f'epoch:{iteration}')
+        print(f'iters:{iteration}')
         res = []
 
-        als_model = ALS(factors=128, regularization=0.08, iterations=iteration,use_gpu=True)
+        als_model = ALS(factors=1024, regularization=0.08, iterations=iteration,use_gpu=True) # 16, 1024
         als_model.fit(train_songs_A.T)   
 
-        als_model_tag = ALS(factors=128, regularization=0.08, iterations=iteration ,use_gpu=True)
+        als_model_tag = ALS(factors=1024, regularization=0.08, iterations=iteration ,use_gpu=True)
         als_model_tag.fit(train_tags_A.T)
 
         for pid in tqdm(range(self.n_test)):  ## 한 15분 정도 걸림
@@ -203,14 +204,23 @@ class CF:
         # compare = pd.merge(predict,answer,how='left',on='id') > 에러..
         predict[['songs_ans','tags_ans']] = answer[['songs','tags']]
 
+        ''' 
+        원래 eval_rate 
         predict['correct_songs']= predict.apply(lambda x:len(set(x['songs'])&set(x['songs_ans']))/len(x['songs_ans']) * 100, axis=1)
         predict['correct_tags'] = predict.apply(lambda x:len(set(x['tags'])&set(x['tags_ans']))/len(x['tags_ans']) * 100, axis=1)
+        '''
 
-        correct_songs = predict.loc[:,"correct_songs"].mean()
-        correct_tags = predict.loc[:,"correct_tags"].mean()
+        predict['correct_songs']= predict.apply(lambda x:len(set(x['songs'])&set(x['songs_ans'])))
+        predict['correct_tags'] = predict.apply(lambda x:len(set(x['tags'])&set(x['tags_ans'])))
 
-        print(f"Songs: {correct_songs:.3}%")
-        print(f"Tags: {correct_tags:.3}%")
+        ans_songs_num = predict['songs_ans'].map(len).sum()
+        ans_tags_num = predict['tags_ans'].map(len).sum()
+
+        correct_songs = predict.loc[:,"correct_songs"].sum()
+        correct_tags = predict.loc[:,"correct_tags"].sum()
+
+        print(f"Songs: {(correct_songs/ans_songs_num) * 100:.3}%")
+        print(f"Tags: {(correct_tags/ans_tags_num) * 100 :.3}%")
 
 
     def eval_dcg(self,res):
