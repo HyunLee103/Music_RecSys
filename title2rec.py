@@ -11,9 +11,11 @@ import gensim  # 3.3.0 not available keyedvectors
 from arena_util import load_json
 from sklearn.cluster import KMeans
 import sklearn.metrics
-import pickle
+import pickle   
 import re
 from collections import Counter
+from khaiii import KhaiiiApi
+
 
 """
 class PlyEmbedding -> 플레이리스트 들어가서 플레이리스트 마다 일정하게 벡터가 부여된다.
