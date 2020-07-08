@@ -10,6 +10,7 @@ from tqdm import tqdm
 import gensim  # 3.3.0 not available keyedvectors
 from arena_util import load_json
 from sklearn.cluster import KMeans
+from sklearn.externals import joblib
 import sklearn.metrics
 import pickle   
 import re
@@ -134,6 +135,7 @@ class PlyEmbedding:
         pass
 
 
+
 # data load
 train_path = "arena_data/orig/train.json"
 
@@ -200,6 +202,9 @@ class Title2Rec:
         self.cluster_model = None
         self.fasttext = None
         self.t2r = None
+        self.good_tags = ['NNG', 'NNP', 'NNB', 'NP', 'NR',
+        'VA', 'MAG', 'SN', 'SL']
+        self.khaiii = KhaiiiApi()
         
     def fit_clustering(self, vectors,
                    n_clusters, verbose=0, max_iter=50):
@@ -210,15 +215,24 @@ class Title2Rec:
         self.cluster_model.fit(vectors)
         print("done.")
         
-    @staticmethod
-    def preprocess_clustering(titles, vectors, ID=True):
+    def preprocess_clustering(self, titles, vectors, ID=True, khaiii=True):
         if ID:
             id_list = list(map(lambda x: x.split(' ')[0][1:-1], titles))
             titles = list(map(lambda x: ' '.join(x.split(' ')[1:]), titles))
+        else:
+            id_list = list(range(len(titles)))
         t_v = list(zip(titles, vectors, id_list))
         stable = [(t, v, i) for t, v, i in t_v if re.findall('[가-힣a-zA-Z&]+', t) != []]
         stable = [(' '.join(re.findall('[가-힣a-zA-Z&]+|90|80|70', t)), v, i) for t, v, i in stable]
         stable = [(t, v, i) for t, v, i in stable if t != '']
+
+        def tag_process(title, khaiii, good_tags):
+            token = khaiii.analyze(title)
+            return ' '.join([morph.lex for to in token for morph in to.morphs if morph.tag in good_tags])
+
+        if khaiii:
+            stable = [(tag_process(t, self.khaiii, self.good_tags), v, i) for t, v, i in tqdm(stable)]
+            stable = [(t, v, i) for t, v, i in stable if t != '']
         titles = [t for t, v, i in stable]
         vectors = [v for t, v, i in stable]
         id_list = [i for t, v, i in stable]
@@ -270,24 +284,36 @@ class Title2Rec:
         out = [self.t2r.wv.similar_by_vector(t, topn=topn) for t in ft]
         return out
 
+    def load_cluster(self, fname):
+        self.cluster_model = joblib.load(fname)
+        print("load complete")
+
+
+
 t2r = Title2Rec()
 
 """
 1. 제목에 영어와 완전한 한글만 있는거(ex.2019.02.23, 123231-1, ㅋㅋ, ㅎㅎ, ^^, (하트하트))
 2. 숫자와 특수문자 제거 (ex. 크리스마스 223) - 70, 80, 90 만 넣기
 """
-t, v, ID = Title2Rec.preprocess_clustering(titles, vectors, ID=True)
 
+t, v, ID = t2r.preprocess_clustering(titles, vectors, ID=True, khaiii=True)
 
-t2r.fit_clustering(v[:10000], n_clusters=200)
+t2r.fit_clustering(v, n_clusters=500)
+t2r.load_cluster('cluster_model/sub_train_500center_khaiii.pkl')
 
-data = t2r.pre_fasttext(t[:10000], v[:10000])
+data = t2r.pre_fasttext(t, v)
 
 t2r.fit_fasttext(data)
 t2r.fit_title2rec(t, ID)
 
-similar = t2r.forward(['ㄻㅇㄹ '])
+t[32165]
+similar = t2r.forward([''])
 similar[0]
+
+titles[20024]
+khiii = KhaiiiApi()
+[y.tag for x in khiii.analyze("슬플 때") for y in x.morphs]
 
 """
 input: titles, n_song
@@ -320,4 +346,23 @@ T2R로 채워 넣을 곡 개수: ? (아마 30~40개) -> 이것도 input.
  
 
 &*@#&*$ <<<태그 가져오는 것도 잊지 말자>>> ^&#*^
+
+
+<7/8>
+매번 s2v으로 한 플레이리스트 임베딩이 달라짐
+달라진 것으로 clustering하면 결과 역시 달라지기 때문에
+cluster 모델만 저장하는건 상당히 이상한 일이죠!
+fit_fasttext에서 cluster를 예측할 때 매번 달라집니다.
+
+a. 매번 cluster한다
+
+b. 그에 따른 title의 벡터 값을 저장한다.
+
+<회의>
+1. Song2Vec을 저장해놓다. sub-train, train
+2. khaiii vs re cluster 결과를 저장해놓자.
+3. fasttext 오래 안걸리
+4. 
+
 """
+train[0]
