@@ -25,12 +25,14 @@ import pickle
 cd /content/drive/My Drive/Kakao arena
 
 ## split.py로 raw train을 train, test로 분리
-train = pd.read_json('arena_data/orig/train.json')
-test = pd.read_json('arena_data/orig/val.json')
+train = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/train.json')
+test = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/test.json')
 song_meta = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/song_meta.json', typ = 'frame',encoding='utf-8')
 plylst_meta = pd.DataFrame(train[['id','tags','plylst_title']])
 
-"""## 1. tag spare matrix 만들기(target)"""
+"""## 1. tag spare matrix 만들기(target)
+tag는 over_5 할 필요 X
+"""
 
 train['istrain'] = 1
 test['istrain'] = 0
@@ -69,15 +71,12 @@ for i, t in enumerate(song_dict):       # song에는 sid 값 부여하기~
 
 n_songs = len(song_dict)
 
-plylst['songs_id'] = plylst['songs'].map(lambda x: [song_id_sid.get(s) for s in x if song_id_sid.get(s) != None]) # get ; key로 value 얻기
 plylst['tags_id'] = plylst['tags'].map(lambda x: [tag_id_tid.get(t) for t in x if tag_id_tid.get(t) != None])
 
 ## 원래 id 찾아가는 dict
-song2id = {v: k for k, v in song_id_sid.items()}
 tid2tag = {v:k for k, v in tag_id_tid.items()}
 
 plylst_use = plylst
-plylst_use.loc[:,'num_songs'] = plylst_use['songs_id'].map(len)
 plylst_use.loc[:,'num_tags'] = plylst_use['tags_id'].map(len)
 plylst_use = plylst_use.set_index('nid')
 
@@ -99,12 +98,122 @@ tag_target = train_tags_A.T
 
 """## 2. input X 만들기
 
-### song embedding
+### meta 정보 붙이기
 """
 
-X = pd.read_json('/content/drive/My Drive/Kakao arena/X_total.json',orient='table')
+plylst_song_map = train[['id', 'songs']]
 
-X.head(3)
+plylst_song_map_unnest = np.dstack(
+    (
+        np.repeat(plylst_song_map.id.values, list(map(len, plylst_song_map.songs))), 
+        np.concatenate(plylst_song_map.songs.values)
+    )
+)
+
+plylst_song_map = pd.DataFrame(data = plylst_song_map_unnest[0], columns = plylst_song_map.columns)
+plylst_song_map['id'] = plylst_song_map['id'].astype(str)
+plylst_song_map['songs'] = plylst_song_map['songs'].astype(str)
+
+del plylst_song_map_unnest
+
+plylst_song_map = plylst_song_map.astype(float)
+plylst_song_map = plylst_song_map.astype(int)
+
+plylst_song_map = pd.merge(plylst_song_map,song_meta,how='left',left_on='songs',right_index=True)
+plylst_song_map = plylst_song_map.drop('id_y',axis=1)
+plylst_song_map.rename(columns={'id_x':'id'},inplace=True)
+
+plylst_meta = pd.DataFrame(train[['id','tags','plylst_title']])
+
+for column in plylst_song_map.columns[1:]:
+  plylst_sum = pd.DataFrame(plylst_song_map.groupby('id')[column].apply(list))
+  plylst_sum = plylst_sum.reset_index()
+
+  plylst_sum['id'] = plylst_sum['id'].astype(str).astype(int)
+  plylst_meta = pd.merge(plylst_meta,plylst_sum,left_on='id',right_on='id',how='inner')
+
+list_columns = ['song_gn_dtl_gnr_basket','artist_id_basket','song_gn_gnr_basket','artist_name_basket']
+
+for column in list_columns:
+  plylst_meta[f'{column}_flatten'] = plylst_meta[column].map(lambda x : sum(x,[])) # 이중리스트 단일 리스트로. (list_columns의 column들이 이중리스트인 것들)
+  plylst_meta[f'{column}_unique'] = plylst_meta[f'{column}_flatten'].map(lambda x : list(set(x))) # 리스트 > 집합 > 리스트로 unique한 값 남김
+  plylst_meta[f'{column}_count'] = plylst_meta[f'{column}_unique'].map(lambda x : len(x)) # unique한 것 개수 세기
+
+
+meta = plylst_meta[['id','tags','plylst_title','songs','issue_date','song_gn_gnr_basket_flatten','artist_id_basket_flatten','artist_id_basket_count','song_gn_gnr_basket_count']]
+
+meta['updt_date'] = train['updt_date']
+
+meta.head(3)
+
+"""### Feature engineering"""
+
+train = meta
+
+"""#### Season"""
+
+train['updt_date'] = pd.to_datetime(train['updt_date'], format='%Y-%m-%d %H:%M:%S', errors='raise')
+
+train['date'] = train['updt_date'].dt.date         # YYYY-MM-DD(문자)
+train['year']     = train['updt_date'].dt.year         # 연(4자리숫자)
+train['month']      = train['updt_date'].dt.month        # 월(숫자)
+train['season'] = train['updt_date'].dt.quarter
+
+train['season'][train['month'].isin([1,2,12])] = 4  # 겨울
+train['season'][train['month'].isin([3,4,5])] = 1   # 봄
+train['season'][train['month'].isin([6,7,8])] = 2  # 여름
+train['season'][train['month'].isin([9,10,11])] = 3  # 가을
+
+"""#### Year_section"""
+
+df = pd.DataFrame(columns=['year_section'])
+train = pd.concat([train,df])
+
+train['year_section'][train['year'].isin([2005,2006,2007,2008,2009,2010,2011,2012])] = 1
+train['year_section'][train['year'].isin([2013,2014])] = 2
+train['year_section'][train['year'].isin([2015,2016])] = 3
+train['year_section'][train['year'].isin([2017,2018])] = 4
+train['year_section'][train['year'].isin([2019,2020])] = 5
+
+del train['date']
+del train['updt_date']
+del train['issue_date']
+
+train.head(3)
+
+"""#### 장르 임배딩"""
+
+X = train
+genre_gn_all = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/genre_gn_all.json', typ = 'series')
+genre_gn_all = pd.DataFrame(genre_gn_all, columns = ['gnr_name']).reset_index().rename(columns = {'index' : 'gnr_code'})
+gnr_code = genre_gn_all[genre_gn_all['gnr_code'].str[-2:] == '00']
+code2idx = {code:i for i, code in gnr_code['gnr_code'].reset_index(drop=True).items()}
+code2idx['GN9000'] = 30
+
+def genre_cnt(x):
+    counter = Counter(x)
+    out = np.zeros(31)
+    for gnr, cnt in counter.items():
+        out[code2idx[gnr]] = cnt
+    return out/len(x)
+
+X_gn = pd.concat([X, pd.DataFrame(list(X['song_gn_gnr_basket_flatten'].apply(genre_cnt)))],axis=1)
+
+X_gn = X_gn.add_prefix('gn_') 
+
+X_gn.rename(columns = {'gn_id':'id','gn_plylst_title':'plylst_title','gn_song_gn_gnr_basket_flatten':'song_gn_gnr_basket_flatten','gn_artist_id_basket_flatten':'artist_id_basket_flatten',
+                      'gn_artist_id_basket_count':'artist_id_basket_count','gn_song_gn_gnr_basket_count':'song_gn_gnr_basket_count','gn_tags':'tags','gn_year':'year','gn_month':'month',
+                      'gn_season':'season','gn_year_section':'year_section'},inplace=True)
+
+X_gn.head(3)
+
+"""#### Song 임배딩"""
+
+def load_json(fname):
+    with open(fname, encoding='utf8') as f:
+        json_obj = json.load(f)
+
+    return json_obj
 
 import json
 from gensim.models import Word2Vec
@@ -242,7 +351,7 @@ class PlyEmbedding:
     w2v 학습 후 over_5에 적용
 """
 
-train_path = "arena_data/orig/train.json"
+train_path = "/content/drive/My Drive/Kakao arena/data/meta/train.json"
 
 train = load_json(train_path)
 
@@ -256,6 +365,10 @@ song_vector = m.wv
 
 song = song_vector.vocab.keys()
 song_vector_lst = [song_vector[v] for v in song]
+
+## 저장 
+from gensim.models import KeyedVectors
+song_vector.save_word2vec_format('song2v')
 
 def song_embed(x):
     tem = []
@@ -271,10 +384,11 @@ def song_embed(x):
 
 song_vector.vocab.keys()
 
-train = pd.read_json('arena_data/orig/train.json')
-tem = list(map(str, train['songs']))
+X_gn.head(3)
 
-X_songembed = pd.concat([X, pd.DataFrame(list(pd.Series(tem).apply(song_embed)))],axis =1 )
+tem = list(map(str, X_gn['gn_songs']))
+
+X_songembed = pd.concat([X_gn, pd.DataFrame(list(pd.Series(tem).apply(song_embed)))],axis =1 )
 
 X_songembed.rename(columns = {0:'song_0',1:'song_1',2:'song_2',3:'song_3',4:'song_4',5:'song_5',6:'song_6',7:'song_7',8:'song_8',9:'song_9',10:'song_10',11:'song_11',12:'song_12',
                           13:'song_13',14:'song_14',15:'song_15',16:'song_16',17:'song_17',18:'song_18',19:'song_19',20:'song_20',21:'song_21',22:'song_22',23:'song_23',
@@ -286,7 +400,13 @@ X_songembed = X_songembed.drop('gn_songs',axis=1)
 
 X_songembed.head(3)
 
-X_songembed = X_songembed.drop(X_songembed.columns[list(range(34,50))], axis='columns')
+del X_songembed['song_gn_gnr_basket_flatten']
+del X_songembed['artist_id_basket_flatten']
+del X_songembed['tags']
+del X_songembed['year']
+del X_songembed['month']
+
+X_songembed
 
 df_season = pd.get_dummies(X_songembed['season']).add_prefix('season') 
 df_year = pd.get_dummies(X_songembed['year_section']).add_prefix('year_section') 
@@ -296,6 +416,8 @@ del X_train['season']
 del X_train['year_section']
 
 X_train.rename(columns={'season1.0':'season_1','season2.0':'season_2','season3.0':'season_3','season4.0':'season_4','year_section1.0':'year_1','year_section2.0':'year_2','year_section3.0':'year_3','year_section4.0':'year_4','year_section5.0':'year_5'})
+
+del X_train['gn_30']
 
 ## cnt 변수 정규화
 X_train['artist_id_basket_count'] = (X_train['artist_id_basket_count'] - X_train['artist_id_basket_count'].mean())/X_train['artist_id_basket_count'].std()

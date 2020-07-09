@@ -49,11 +49,11 @@ if args.mode == 'tag':
 
   full = full.T
   X = full[0:73].T.todense()
-  lst = list(range(92056))
+  lst = list(range(115071))
 
 
   ## Training
-  for i in range(73,29160):
+  for i in range(73,29703):
     tag = full[i]
     y = tag.data
 
@@ -69,7 +69,7 @@ if args.mode == 'tag':
     model_lgb.fit(X_input, Y)
 
     # lgb_train_pred = model_lgb.predict(X_input)
-    joblib.dump(model_lgb,'./tag_regression/{}_model'.format(tid2tag.get((i-73))))
+    joblib.dump(model_lgb,'./tag_regression_2/{}_model'.format(tid2tag.get((i-73))))
     print(i-73)
     # print(rmsle(Y, lgb_train_pred))   
 
@@ -87,12 +87,12 @@ elif args.mode == 'song':
 
 
   full = full.T
-  X = full[0:57].T.todense()
-  lst = list(range(92056))
+  X = full[0:73].T.todense()
+  lst = list(range(115071))
 
 
   ## Training
-  for i in range(57,125000):
+  for i in range(73,145000):
     song = full[i]
     y = song.data
 
@@ -108,8 +108,8 @@ elif args.mode == 'song':
     model_lgb.fit(X_input, Y)
 
     # lgb_train_pred = model_lgb.predict(X_input)
-    joblib.dump(model_lgb,'./song_regression/{}_model'.format(sid2id.get((i-57))))
-    print(i-57)
+    joblib.dump(model_lgb,'./song_regression_2/{}_model'.format(sid2id.get((i-73))))
+    print(i-73)
     # print(rmsle(Y, lgb_train_pred))   
 
 

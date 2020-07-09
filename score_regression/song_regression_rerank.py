@@ -43,9 +43,9 @@ orig/train, val 불러서
 6. tag model는 생성된 tag_id로 학습된 모델 저장하고 원래 tag랑 mapping dict 유지해놓을것
 """
 
-## split.py로 raw train을 train, test로 분리
-train = pd.read_json('arena_data/orig/train.json')
-test = pd.read_json('arena_data/orig/val.json')
+## real train, val 불러오자
+train = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/train.json')
+test = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/val.json')
 
 song_meta = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/song_meta.json', typ = 'frame',encoding='utf-8')
 plylst_meta = pd.DataFrame(train[['id','tags','plylst_title']])
@@ -136,8 +136,12 @@ plylst['songs_id'] = plylst['songs'].map(lambda x: [song_id_sid.get(s) for s in 
 plylst['tags_id'] = plylst['tags'].map(lambda x: [tag_id_tid.get(t) for t in x if tag_id_tid.get(t) != None])
 
 ## 원래 id 찾아가는 dict
-song2id = {v: k for k, v in song_id_sid.items()}
-tag2id = {v:k for k, v in tag_id_tid.items()}
+sid2id = {v: k for k, v in song_id_sid.items()}
+
+## tid2tag 저장
+file=open("sid2id","wb") 
+pickle.dump(sid2id,file) 
+file.close()
 
 plylst_use = plylst
 plylst_use.loc[:,'num_songs'] = plylst_use['songs_id'].map(len)
@@ -160,25 +164,23 @@ dat_series = plylst_train['num_songs'].map(rating)
 dat = [y for x in dat_series for y in x]
 train_songs_A = spr.csr_matrix((dat, (row, col)), shape=(n_train, n_songs))
 
-row = np.repeat(range(n_train), plylst_train['num_tags'])
-col = [tag for tags in plylst_train['tags_id'] for tag in tags]
-dat_series = plylst_train['num_tags'].map(rating)
-dat = [y for x in dat_series for y in x]
-train_tags_A = spr.csr_matrix((dat, (row, col)), shape=(n_train, n_tags))
+train_songs_A  # song은 20만 곡으로 줄었음
 
-train_tags_A # 태그는 그대로
+len(train_songs_A.T[0:145000].data)
 
-train_songs_A  # song은 28만 곡으로 줄었음
+len(train_songs_A.T[145000:].data) ## 145000번 곡 까지만 타겟으로 사용 뒤에는 비어있음
 
-len(train_songs_A.T[120000:125000].data)
+song_target = train_songs_A.T[0:145000].T
 
-len(train_songs_A.T[120000:280080].data) ## 125000번 곡 까지만 타겟으로 사용 뒤에는 비어있음
+"""## 3. raw train에 meta 정보 추가
+raw train 기준으로 meta 정보 담고, 이후에 over_5로 곡을 줄여준다
+"""
 
-song_target = train_songs_A.T[0:125000].T
-
-tag_target = train_tags_A
-
-"""## 3. raw sub_train에 meta 정보 추가"""
+## real train, val 불러오자
+train = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/train.json')
+test = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/val.json')
+song_meta = pd.read_json('/content/drive/My Drive/Kakao arena/data/meta/song_meta.json', typ = 'frame',encoding='utf-8')
+plylst_meta = pd.DataFrame(train[['id','tags','plylst_title']])
 
 plylst_song_map = train[['id', 'songs']]
 
@@ -228,6 +230,8 @@ meta = plylst_meta[['id','tags','plylst_title','songs','issue_date','song_gn_gnr
 
 meta.head(3)
 
+"""## over_5"""
+
 plylst_song_map = train[['id', 'songs']]
 
 # unnest songs
@@ -267,11 +271,6 @@ meta.rename(columns = {'over5_songs' : 'songs'}, inplace = True)
 meta['updt_date'] = train['updt_date']
 
 meta
-
-## 저장
-meta.to_json('meta.json', orient='table')
-
-meta = pd.read_json('meta.json',orient='table')
 
 """# Util function"""
 
@@ -434,17 +433,24 @@ X_gn.rename(columns = {'gn_id':'id','gn_plylst_title':'plylst_title','gn_song_gn
 
 X_gn.head(3)
 
+## 저장
+X_gn.to_json('tem.json', orient='table')
+
 """### tag 임배딩"""
 
 from gensim.models import Word2Vec
 tags = [p for p in X['tags'] if len(p) != 1]
 
-m = Word2Vec(tags, size=16)
+m = Word2Vec(tags, size=32)
 
 tag_vector = m.wv
 
 tags = tag_vector.vocab.keys()
 tag_vector_lst = [tag_vector[v] for v in tags]
+
+## 저장 
+from gensim.models import KeyedVectors
+tag_vector.save_word2vec_format('tag2v')
 
 def tag_embed(x):
     tem = []
@@ -454,11 +460,14 @@ def tag_embed(x):
         except KeyError as e:
             pass
     if tem == []:
-        return np.zeros(16)
+        return np.zeros(32)
     else:
         return np.mean(tem,axis=0)
 
 X_total = pd.concat([X_gn ,pd.DataFrame(list(X['tags'].apply(tag_embed)))],axis=1)
+
+X_total.rename(columns = {0:'tag_0',1:'tag_1',2:'tag_2',3:'tag_3',4:'tag_4',5:'tag_5',6:'tag_6',7:'tag_7',8:'tag_8',9:'tag_9',10:'tag_10',11:'tag_11',12:'tag_12',
+                          13:'tag_13',14:'tag_14',15:'tag_15',16:'tag_16',17:'tag_17',18:'tag_18',19:'tag_19',20:'tag_20',21:'tag_21',22:'tag_22',23:'tag_23',24:'tag_24',25:'tag_25',26:'tag_26',27:'tag_27',28:'tag_28',29:'tag_29',30:'tag_30',31:'tag_31'},inplace=True)
 
 X_total.rename(columns = {0:'tag_0',1:'tag_1',2:'tag_2',3:'tag_3',4:'tag_4',5:'tag_5',6:'tag_6',7:'tag_7',8:'tag_8',9:'tag_9',10:'tag_10',11:'tag_11',12:'tag_12',
                           13:'tag_13',14:'tag_14',15:'tag_15'},inplace=True)
@@ -487,7 +496,7 @@ X_train.to_json('X_train.json', orient='table')
 """
 artist_cnt, gn_cnt, season, year_section -> 11차원
 장르 cnt-hot-encoding : 비율 -> 30차원
-태그 w2v -> 16차원
+태그 w2v -> 32차원
 
 총 input features 57차원
 """
@@ -511,6 +520,16 @@ X_train['song_gn_gnr_basket_count'] = (X_train['song_gn_gnr_basket_count'] -X_tr
 
 X_train
 
+## 저장 
+X_train.to_json('song_train.json', orient='table')
+"""
+artist_cnt, gn_cnt, season, year_section -> 11차원
+장르 cnt-hot-encoding : 비율 -> 30차원
+태그 w2v -> 32차원
+
+총 input features 73차원
+"""
+
 X_train = X_train.astype(float)
 X_spr = spr.csr_matrix(X_train)
 X_spr
@@ -520,62 +539,4 @@ song_target
 full = hstack((X_spr,song_target))
 full = full.tocsc() ; full
 
-song_full = full
-
 mmwrite('song_full.mtx', full)
-
-"""# Modeling"""
-
-from sklearn.linear_model import ElasticNet, Lasso,  BayesianRidge, LassoLarsIC
-from sklearn.ensemble import RandomForestRegressor,  GradientBoostingRegressor
-from sklearn.kernel_ridge import KernelRidge
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import RobustScaler
-from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
-from sklearn.model_selection import KFold, cross_val_score, train_test_split
-from sklearn.metrics import mean_squared_error
-from xgboost import XGBRegressor
-import xgboost as xgb
-import lightgbm as lgb
-from sklearn.svm import SVR
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.datasets import make_regression
-from sklearn.model_selection import GridSearchCV
-import random
-
-def rmsle(y, y_pred):
-    return np.sqrt(mean_squared_error(y, y_pred))
-
-import joblib
-from tqdm import tqdm
-
-full = full.T
-X = full[0:57].T.todense()
-lst = list(range(92056))
-
-for i in range(57,125057):
-    song = full[i]
-    y = song.data
-
-    neg_1 = list(set(lst) - set(song.indices))
-    k = round(len(y)*1.5)
-    neg_idx = random.choices(neg_1, k=k)
-
-    X_input = X[neg_idx+list(song.indices), :]
-
-    Y = np.concatenate((y, np.zeros(k)))
-    model_lgb = lgb.LGBMRegressor(n_estimators=300)
-
-    model_lgb.fit(X_input, Y)
-
-    # lgb_train_pred = model_lgb.predict(X_input)
-    joblib.dump(model_lgb,'./LGBM/{}_model'.format(sid2id.get((i-57))))
-    print(i-57)
-  # print(rmsle(Y, lgb_train_pred))     
-    # # model_xgb_2 = xgb.XGBRegressor(learning_rate=0.01,max_depth=3,n_estimators=300,objective ='reg:squarederror')
-    # model_xgb_2.fit(X_input, Y)
-    # xgb_train_pred = model_xgb_2.predict(X_input)
-
-    #joblib.dump(model_lgb,'./XGBOOST/{}_model'.format(i-50))
-
-    # print("{} rmse : {}".format(i-50,rmsle(Y, xgb_train_pred)))
