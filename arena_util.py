@@ -7,11 +7,13 @@ from collections import Counter
 
 import numpy as np
 
-
 def write_json(data, fname):
     def _conv(o):
         if isinstance(o, (np.int64, np.int32)):
             return int(o)
+        elif isinstance(o, (np.float64,np.float32)): 
+            return float(o)
+            
         raise TypeError
 
     parent = os.path.dirname(fname)
@@ -34,7 +36,7 @@ def debug_json(r):
 
 def remove_seen(seen, l):
     seen = set(seen)
-    return [x for x in l if not (x in seen)]
+    return [x for x in l if not (x in seen)] # l에 있지만 seen에 없는 것
 
 
 def most_popular(playlists, col, topk_count):

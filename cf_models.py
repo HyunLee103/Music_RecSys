@@ -18,6 +18,8 @@ class CF:
         # self.orig_test= pd.read_json("arena_data/orig/val.json", encoding='utf-8')
         self.ans = pd.read_json("arena_data/answers/val_hye.json", encoding='utf-8')
 
+        # self.test_info = pd.read_json(val_ply)
+
         self.train['istrain'] = 1
         self.test['istrain'] = 0
 
@@ -194,7 +196,7 @@ class CF:
         songs_A = spr.vstack([test_songs_A,train_songs_A])
         tags_A = spr.vstack([test_tags_A,train_tags_A])
 
-        als_model = ALS(factors=200, regularization=0.08, use_gpu=True, iterations=iteration) # epoch
+        als_model = ALS(factors=256, regularization=0.08, use_gpu=True, iterations=iteration) # epoch
         als_model.fit(songs_A.T * 100)   
 
         als_model_tag = ALS(factors=32, regularization=0.08, use_gpu=True, iterations=iteration)
@@ -204,33 +206,27 @@ class CF:
         #rec_tag = als_model_tag.recommend_all(train_tags_A,N=50) # list (no score)
 
         for pid in tqdm(range(test_songs_A.shape[0])):
-            '''
-            if self.plylst_test.loc[(self.n_train + pid),"song_added"]:
-                cand_song_idx = als_model.recommend(pid, test_songs_A, N=song_ntop+50, filter_already_liked_items=False)
-                songs_already = self.orig_test.loc[self.plylst_nid_id[(self.n_train + pid)],"songs"]
-                cand_song_idx = remove_seen(songs_already,cand_song_idx)[:song_ntop]
+        
+            if self.plylst_test.loc[(self.n_train+pid),"song_dirty"] == 1:
+                cand_song = als_model.recommend(pid, test_songs_A, N=song_ntop+50, filter_already_liked_items=False)
+                #songs_already = self.orig_test[self.orig_test['id']== self.plylst_nid_id[self.n_train + pid]]['songs']
+                #cand_song = remove_seen(songs_already,cand_song)[:song_ntop]
 
             else:
-                cand_song_idx = als_model.recommend(pid, test_songs_A, N=song_ntop, filter_already_liked_items=True)
+                cand_song = als_model.recommend(pid, test_songs_A, N=song_ntop, filter_already_liked_items=True)
 
-
-            if self.plylst_test.loc[(self.n_train + pid),"tag_added"]:
-                cand_tag_idx = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop+5,  filter_already_liked_items=False)
-                tags_already = self.orig_test.loc[self.plylst_nid_id[(self.n_train + pid)],"tags"]
-                cand_tag_idx = remove_seen(tags_already,cand_tag_idx)[:tag_ntop]
+            if self.plylst_test.loc[(self.n_train+pid),"tag_dirty"] == 1:
+                cand_tag = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop+5,  filter_already_liked_items=True)
+                #tags_already = self.orig_test[self.orig_test['id']== self.plylst_nid_id[self.n_train + pid]]['tags']
+                #cand_tag = remove_seen(tags_already,cand_tag)[:tag_ntop]
 
             else:
-                cand_tag_idx = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop,  filter_already_liked_items=True)
+                cand_tag = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop,  filter_already_liked_items=True)
 
-            '''
-
-            rec_song = als_model.recommend(pid, test_songs_A, N=song_ntop, filter_already_liked_items=True)
-            rec_tag = als_model_tag.recommend(pid, test_tags_A, N=tag_ntop,  filter_already_liked_items=True)
-
-            rec_song_idx = [self.song_sid_id.get(x[0]) for x in rec_song]
-            rec_song_score = [x[1] for x in rec_song]
-            rec_tag_idx = [self.tag_tid_id.get(x[0]) for x in rec_tag]
-            rec_tag_score = [x[1] for x in rec_tag]
+            rec_song_idx = [self.song_sid_id.get(x[0]) for x in cand_song]
+            rec_song_score = [x[1] for x in cand_song]
+            rec_tag_idx = [self.tag_tid_id.get(x[0]) for x in cand_tag]
+            rec_tag_score = [x[1] for x in cand_tag]
 
             res.append({
                         "id": self.plylst_nid_id[self.n_train + pid],
