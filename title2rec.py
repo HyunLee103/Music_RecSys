@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import gensim  # 3.3.0 not available keyedvectors
-from arena_util import load_json
+from arena_util import load_json, write_json
 from sklearn.cluster import KMeans
 from sklearn.externals import joblib
 import sklearn.metrics
@@ -16,6 +16,7 @@ import pickle
 import re
 from collections import Counter
 from khaiii import KhaiiiApi
+import math
 
 
 """
@@ -134,6 +135,22 @@ class PlyEmbedding:
     def by_autoencoder(self):
         pass
 
+    def load_s2v(self, path):
+        self.s2v = gensim.models.KeyedVectors.load(path)
+        print("load complete.")
+
+    def get_embed(self, songs):
+        out = []
+        for song in songs:
+            try:
+                tmp = self.s2v.wv.get_vector(str(song))
+                out.append(tmp)
+            except KeyError:
+                pass
+        if out == []:
+            return False
+        else:
+            return np.mean(out, axis=0)        
 
 
 # data load
@@ -147,13 +164,16 @@ embed = PlyEmbedding(train)
 embed.make_s2v()
 embed.make_d2v()
 
+# load s2v models
+embed.load_s2v("embedding_models/s2v.model")
+
+
 # all possible plylst embedding
 s2v_sum = embed.song_based(mode='s2v', by='sum', keyedvector=True)
 s2v_mean = embed.song_based(mode='s2v', by='mean', keyedvector=True)
 d2v_sum = embed.song_based(mode='d2v', by='sum', keyedvector=True)
 d2v_mean = embed.song_based(mode='d2v', by='mean', keyedvector=True)
 
-s2v_mean.wv.similar_by_vector(np.ones(100))
 
 # check the result.
 def p2v_test(data, num, m1, m2):
@@ -215,7 +235,7 @@ class Title2Rec:
         self.cluster_model.fit(vectors)
         print("done.")
         
-    def preprocess_clustering(self, titles, vectors, ID=True, khaiii=True):
+    def preprocess_clustering(self, titles, vectors, ID=True, khaiii=True, verbose=False):
         if ID:
             id_list = list(map(lambda x: x.split(' ')[0][1:-1], titles))
             titles = list(map(lambda x: ' '.join(x.split(' ')[1:]), titles))
@@ -231,13 +251,18 @@ class Title2Rec:
             return ' '.join([morph.lex for to in token for morph in to.morphs if morph.tag in good_tags])
 
         if khaiii:
-            stable = [(tag_process(t, self.khaiii, self.good_tags), v, i) for t, v, i in tqdm(stable)]
-            stable = [(t, v, i) for t, v, i in stable if t != '']
+            if verbose:
+                stable = [(tag_process(t, self.khaiii, self.good_tags), v, i) for t, v, i in tqdm(stable)]
+                stable = [(t, v, i) for t, v, i in stable if t != '']
+            else:
+                stable = [(tag_process(t, self.khaiii, self.good_tags), v, i) for t, v, i in stable]
+                stable = [(t, v, i) for t, v, i in stable if t != '']
         titles = [t for t, v, i in stable]
         vectors = [v for t, v, i in stable]
         id_list = [i for t, v, i in stable]
-        print("Original lenght: ", len(t_v))
-        print("Processed length: ", len(titles))
+        if verbose:
+            print("Original lenght: ", len(t_v))
+            print("Processed length: ", len(titles))
         
         return titles, vectors, id_list
    
@@ -288,6 +313,14 @@ class Title2Rec:
         self.cluster_model = joblib.load(fname)
         print("load complete")
 
+    def load_fasttext(self, path):
+        self.fasttext = gensim.models.FastText.load(path)
+
+    def load_t2r(self, path):
+        self.t2r = gensim.models.KeyedVectors.load(path)
+
+a = gensim.models.FastText.load("embedding_models/sub_train_fasttext.model")
+b = gensim.models.KeyedVectors.load()
 
 
 t2r = Title2Rec()
@@ -300,6 +333,10 @@ t2r = Title2Rec()
 t, v, ID = t2r.preprocess_clustering(titles, vectors, ID=True, khaiii=True)
 
 t2r.fit_clustering(v, n_clusters=500)
+
+joblib.dump(t2r.cluster_model, "cluster_model/sub_train_500c_s2v_khaiii.pkl")
+
+
 t2r.load_cluster('cluster_model/sub_train_500center_khaiii.pkl')
 
 data = t2r.pre_fasttext(t, v)
@@ -307,8 +344,11 @@ data = t2r.pre_fasttext(t, v)
 t2r.fit_fasttext(data)
 t2r.fit_title2rec(t, ID)
 
+t2r.fasttext.save("embedding_models/sub_train_fasttext.model")
+t2r.t2r.save("embedding_models/sub_train_t2r.model")
+
 t[32165]
-similar = t2r.forward([''])
+similar = t2r.forward(['년 월'])
 similar[0]
 
 titles[20024]
@@ -365,4 +405,163 @@ b. 그에 따른 title의 벡터 값을 저장한다.
 4. 
 
 """
-train[0]
+
+train_path = "arena_data/orig/train.json"
+val_path = "arena_data/questions/val.json"
+s2v_path = "embedding_models/s2v.model"
+fasttext_path = "embedding_models/sub_train_fasttext.model"
+t2r_path = "embedding_models/sub_train_t2r.model"
+cluster_path = "cluster_model/sub_train_500c_s2v_khaiii.pkl"
+
+train = load_json(train_path)
+val = load_json(val_path)
+
+train_df = pd.DataFrame(train)
+
+embed = PlyEmbedding(train)
+embed.load_s2v(s2v_path)
+
+p2v = embed.song_based(mode='s2v', by='mean', keyedvector=True)
+titles, vectors = embed.song_based(mode='s2v', by='mean', keyedvector=False)
+
+t2r = Title2Rec()
+t2r.load_cluster(cluster_path)
+
+t, v, ID = t2r.preprocess_clustering(titles, vectors, ID=True, khaiii=True, verbose=True)
+
+data = t2r.pre_fasttext(t, v)
+
+t2r.fit_fasttext(data)
+t2r.fit_title2rec(t, ID)
+song_const = 7.66
+tag_const = 3.9
+
+def tag_by_songs(ply, n, const):
+    songs = ply['songs']
+    tag_const = const
+    vec = []
+    for song in songs:
+        try:
+            tmp = embed.s2v.wv.get_vector(str(song))
+            vec.append(tmp)
+        except KeyError:
+            pass
+    if vec == []:
+        return []
+    vec = np.mean(vec, axis=0)
+
+    similars = p2v.wv.similar_by_vector(vec, topn=100)
+
+    ID = [int(sim[0].split(" ")[0][1:-1]) for sim in similars]
+    similar = [sim[1] for sim in similars]
+
+    tmp_df = pd.DataFrame({'id':ID, 'similar':similar})
+    tmp_df = pd.merge(tmp_df, train_df[['id', 'tags']], how='left', on='id')
+    tmp_df['len'] = tmp_df['tags'].apply(lambda x: len(x))
+    tmp_df['len'] = tmp_df['len'].cumsum().shift(1).fillna(0)
+    tmp_df = tmp_df[tmp_df['len'] < 40]
+
+    score_dict = {}
+    for sim, tags in zip(tmp_df['similar'], tmp_df['tags']):
+        for i, tag in enumerate(tags):
+            score = (-math.log(i+1, 2) + tag_const) * sim
+            try:
+                score_dict[tag] += score
+            except KeyError:
+                score_dict[tag] = score
+
+    pick = sorted(score_dict.items(), key=lambda x: x[1])[-n:]
+    pick.reverse()
+    res = [p[0] for p in pick]
+    return res
+
+def title2rec(ply, song_n, tag_n, song_const, tag_const, khaiii=True):
+    title, _, _ = t2r.preprocess_clustering([ply['plylst_title']], [None], ID=False, khaiii=khaiii)
+    if title == []:
+        return ply['songs'], ply['tags'], 0, 0
+
+    title = title[0]
+    similars = t2r.forward([title], topn=100)[0]
+
+    ID = [int(sim[0].split(" ")[0]) for sim in similars]
+    similar = [sim[1] for sim in similars]
+
+    tmp_df = pd.DataFrame({'id':ID, 'similar':similar})
+    tmp_df = pd.merge(tmp_df, train_df[['id', 'songs', 'tags']], how='left', on='id')
+    tmp_df['song_len'] = tmp_df['songs'].apply(lambda x: len(x))
+    tmp_df['song_len'] = tmp_df['song_len'].cumsum().shift(1).fillna(0)
+    song_df = tmp_df[tmp_df['song_len'] < 350]
+
+    score_dict = {}
+    for sim, songs in zip(song_df['similar'], song_df['songs']):
+        for i, song in enumerate(songs):
+            score = (-math.log(i+1, 2) + song_const) * sim
+            try:
+                score_dict[song] += score
+            except KeyError:
+                score_dict[song] = score
+
+    pick = sorted(score_dict.items(), key=lambda x: x[1])[-song_n:]
+    pick.reverse()
+    song_res = [p[0] for p in pick]
+
+    if ply['tags'] != []:
+        return song_res, ply['tags'], 1, 0
+
+    tmp_df['tag_len'] = tmp_df['tags'].apply(lambda x: len(x))
+    tmp_df['tag_len'] = tmp_df['tag_len'].cumsum().shift(1).fillna(0)
+    tag_df = tmp_df[tmp_df['tag_len'] < 40]
+
+    score_dict = {}
+    for sim, tags in zip(tag_df['similar'], tag_df['tags']):
+        for i, tag in enumerate(tags):
+            score = (-math.log(i+1, 2) + tag_const) * sim
+            try:
+                score_dict[tag] += score
+            except KeyError:
+                score_dict[tag] = score
+
+    pick = sorted(score_dict.items(), key=lambda x: x[1])[-tag_n:]
+    pick.reverse()
+    tag_res = [p[0] for p in pick]
+
+    return song_res, tag_res, 1, 1
+
+
+for ply in tqdm(val):
+    ply['song_dirty'] = 0
+    ply['tag_dirty'] = 0
+
+    if ply['songs'] != []:
+        if ply['tags'] != []:
+            pass
+        else:
+            ply['tags'] = tag_by_songs(ply, 3, 3.9)
+            ply['tag_dirty'] = 1
+
+    else:
+        songs, tags, song_sign, tag_sign = title2rec(ply, 35, 3, song_const, tag_const)
+        ply['songs'] = songs
+        ply['tags'] = tags
+        ply['song_dirty'] = song_sign
+        ply['tag_dirty'] = tag_sign
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
