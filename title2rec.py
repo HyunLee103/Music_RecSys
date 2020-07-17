@@ -406,12 +406,12 @@ b. 그에 따른 title의 벡터 값을 저장한다.
 
 """
 
-train_path = "arena_data/orig/train.json"
-val_path = "arena_data/questions/val.json"
-s2v_path = "embedding_models/s2v.model"
-fasttext_path = "embedding_models/sub_train_fasttext.model"
-t2r_path = "embedding_models/sub_train_t2r.model"
-cluster_path = "cluster_model/sub_train_500c_s2v_khaiii.pkl"
+train_path = "res/train.json"
+val_path = "res/val.json"
+s2v_path = "embedding_models/full_s2v.model"
+#fasttext_path = "embedding_models/sub_train_fasttext.model"
+#t2r_path = "embedding_models/sub_train_t2r.model"
+cluster_path = "cluster_model/full_500c_s2v_khaiii.pkl"
 
 train = load_json(train_path)
 val = load_json(val_path)
@@ -420,14 +420,21 @@ train_df = pd.DataFrame(train)
 
 embed = PlyEmbedding(train)
 embed.load_s2v(s2v_path)
+#embed.make_s2v()
+#embed.s2v.save("embedding_models/full_s2v.model")
 
 p2v = embed.song_based(mode='s2v', by='mean', keyedvector=True)
 titles, vectors = embed.song_based(mode='s2v', by='mean', keyedvector=False)
 
 t2r = Title2Rec()
-t2r.load_cluster(cluster_path)
 
 t, v, ID = t2r.preprocess_clustering(titles, vectors, ID=True, khaiii=True, verbose=True)
+
+# t2r.fit_clustering(v, n_clusters=500)
+
+joblib.dump(t2r.cluster_model, "cluster_model/full_500c_s2v_khaiii.pkl")
+
+t2r.load_cluster(cluster_path)
 
 data = t2r.pre_fasttext(t, v)
 
@@ -476,7 +483,7 @@ def tag_by_songs(ply, n, const):
     return res
 
 def title2rec(ply, song_n, tag_n, song_const, tag_const, khaiii=True):
-    title, _, _ = t2r.preprocess_clustering([ply['plylst_title']], [None], ID=False, khaiii=khaiii)
+    title, _, _ = t2r.preprocess_clustering([ply['plylst_title']], [None], ID=False, khaiii=khaiii, verbose=False)
     if title == []:
         return ply['songs'], ply['tags'], 0, 0
 
@@ -547,21 +554,4 @@ for ply in tqdm(val):
         ply['tag_dirty'] = tag_sign
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+write_json(val, "val_t2r.json")
