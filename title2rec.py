@@ -411,21 +411,37 @@ b. 그에 따른 title의 벡터 값을 저장한다.
 
 train_path = "res/train.json"
 val_path = "res/val.json"
-s2v_path = "embedding_models/full_s2v.model"
-cluster_path = "cluster_model/full_500c_s2v_khaiii.pkl"
+test_path = "res/test.json"
+meta_path = "res/song_meta.json"
+s2v_path = "embedding_models/tvt_s2v.model"
+cluster_path = "cluster_model/tvt_500c_s2v_khaiii.pkl"
 
 # load data
 train = load_json(train_path)
 val = load_json(val_path)
+test = load_json(test_path)
+song_meta = load_json(meta_path)
 
 # train to df
 train_df = pd.DataFrame(train)
+
+# make song to date dictionary
+meta_df = pd.DataFrame(song_meta)
+song_date = meta_df[['id', 'issue_date']]
+song_date['issue_date'] = song_date['issue_date'].apply(lambda x: '19500101' if x == '00000000' else x)
+song_date['issue_date'] = song_date['issue_date'].apply(lambda x: x[:4] + '01' + x[-2:] if x[-4:-2] == '00' else x)
+song_date['issue_date'] = song_date['issue_date'].apply(lambda x: x[:6] + '01' if x[-2:] == '00' else x)
+song_date.iloc[168071, 1] = '20010930'
+song_date.iloc[430200, 1] = '20060131'
+song_date.iloc[692325, 1] = '20100513'
+song_date['issue_date'] = pd.to_datetime(song_date['issue_date'])
+song_date = {i: date for i, date in zip(song_date['id'], song_date['issue_date'])}
 
 # embedding load
 embed = PlyEmbedding(train)
 embed.load_s2v(s2v_path)
 #embed.make_s2v()
-#embed.s2v.save("embedding_models/full_s2v.model")
+#embed.s2v.save("embedding_models/tvt_s2v.model")
 
 # p2v for tag_by_song, title-vector for t2r
 p2v = embed.song_based(mode='s2v', by='mean', keyedvector=True)
@@ -437,8 +453,8 @@ t2r = Title2Rec()
 # remove non alpha or hangul. tokenize
 t, v, ID = t2r.preprocess_clustering(titles, vectors, ID=True, khaiii=True, verbose=True)
 
-# t2r.fit_clustering(v, n_clusters=500)
-# joblib.dump(t2r.cluster_model, "cluster_model/full_500c_s2v_khaiii.pkl")
+#t2r.fit_clustering(v, n_clusters=500)
+#joblib.dump(t2r.cluster_model, "cluster_model/tvt_500c_s2v_khaiii.pkl")
 
 # load cluster
 t2r.load_cluster(cluster_path)
@@ -460,6 +476,11 @@ def put_most_popular(seq, pop):
 
 song_const = 7.66
 tag_const = 3.9
+
+# out of date songs
+with open("res/can_in_ply.pickle", 'rb') as f:
+    out_of_date = pickle.load(f)
+out_of_date = set(out_of_date)
 
 def tag_by_songs(ply, n, const):
     songs = ply['songs']
@@ -497,6 +518,7 @@ def tag_by_songs(ply, n, const):
 
     pick = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)[:n]
     res = [p[0] for p in pick]
+    #score_res = [p[1] for p in pick]
 
     return res
 
@@ -509,7 +531,7 @@ def title2rec(ply, song_n, tag_n, song_const, tag_const, khaiii=True):
             return ply['songs'], ply['tags'], 1, 1
 
     title = title[0]
-    similars = t2r.forward([title], topn=150)[0]
+    similars = t2r.forward([title], topn=200)[0]
 
     ID = [int(sim[0].split(" ")[0]) for sim in similars]
     similar = [sim[1] for sim in similars]
@@ -518,7 +540,7 @@ def title2rec(ply, song_n, tag_n, song_const, tag_const, khaiii=True):
     tmp_df = pd.merge(tmp_df, train_df[['id', 'songs', 'tags']], how='left', on='id')
     tmp_df['song_len'] = tmp_df['songs'].apply(len)
     tmp_df['song_len'] = tmp_df['song_len'].cumsum().shift(1).fillna(0)
-    song_df = tmp_df[tmp_df['song_len'] < 1500]
+    song_df = tmp_df[tmp_df['song_len'] < 2000]
 
     score_dict = {}
     for sim, songs in zip(song_df['similar'], song_df['songs']):
@@ -529,8 +551,31 @@ def title2rec(ply, song_n, tag_n, song_const, tag_const, khaiii=True):
             except KeyError:
                 score_dict[song] = score
 
-    pick = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)[:song_n]
-    song_res = [p[0] for p in pick]
+    pick = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)
+    pick = [p[0] for p in pick]
+    # song_res = pick[:song_n]
+    date = pd.to_datetime(ply['updt_date'])
+    pick = [p for p in pick if (song_date[p] <= date) or (p in out_of_date)]
+    song_res = pick[:song_n]
+
+    if len(song_res) < song_n:
+        song_df = tmp_df[tmp_df['song_len'] >= 2000]
+        for sim, songs in zip(song_df['similar'], song_df['songs']):
+            for i, song in enumerate(songs):
+                score = (-math.log(i+1, 2) + song_const) * sim
+                try:
+                    score_dict[song] += score
+                except KeyError:
+                    score_dict[song] = score
+        pick = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)
+        pick = [p[0] for p in pick]
+        pick = [p for p in pick if (song_date[p] <= date) or (p in out_of_date)]
+        song_res = pick[:song_n]
+    assert len(song_res) == 100
+    
+    # assert len(song_res) == song_n
+
+    # song_res = [p[0] for p in pick]
 
     if ply['tags'] != []:
         return song_res, ply['tags'], 1, 0
@@ -553,7 +598,8 @@ def title2rec(ply, song_n, tag_n, song_const, tag_const, khaiii=True):
 
     return song_res, tag_res, 1, 1
 
-
+###############################################
+# inference
 for ply in tqdm(val):
     ply['song_dirty'] = 0
     ply['tag_dirty'] = 0
@@ -569,10 +615,40 @@ for ply in tqdm(val):
 
     else:
         songs, tags, song_sign, tag_sign = title2rec(ply, 100, 10, song_const, tag_const)
-        if (song_sign) and (len(songs) < 100):
+        if (song_sign) and (len(songs) == 0):
             songs = put_most_popular(songs, pop_songs)
+            #raise RuntimeError("song length < 100")
         if (tag_sign) and (len(tags) < 10):
             tags = put_most_popular(tags, pop_tags)
+        ply['songs'] = songs
+        ply['tags'] = tags
+        ply['song_dirty'] = song_sign
+        ply['tag_dirty'] = tag_sign
+
+# expr
+for ply in tqdm(val):
+    ply['song_dirty'] = 0
+    ply['tag_dirty'] = 0
+
+    if ply['songs'] != []:
+        if ply['tags'] != []:
+            pass
+        else:
+            ply['tags'] = tag_by_songs(ply, 10, 3.9)
+            if len(ply['tags']) < 10:
+                ply['tags'] = put_most_popular(ply['tags'], pop_tags)
+            ply['tag_dirty'] = 1
+
+    else:
+        songs, tags, song_sign, tag_sign = [], [], 1, 0
+        if (song_sign) and (len(songs) == 0):
+            songs = put_most_popular(songs, pop_songs)
+            #raise RuntimeError("song length < 100")
+        if ply['tags'] != []:
+            tags = ply['tags']
+        else:
+            tags = put_most_popular(tags, pop_tags)
+            tag_sign = 1
         ply['songs'] = songs
         ply['tags'] = tags
         ply['song_dirty'] = song_sign
@@ -581,20 +657,20 @@ for ply in tqdm(val):
 write_json(val, "val_t2r_all.json")
 
 for x in val:
-    if (x['song_dirty']) and (len(x['songs']) != 100):
+    if (x['song_dirty'] == 1) and (len(x['songs']) != 100):
         print('fuck')
-    if (x['tag_dirty']) and (len(x['tags']) != 10):
+    if (x['tag_dirty'] == 1) and (len(x['tags']) != 10):
         print('fuck')
 
 
 result = load_json("/mnt/c/users/koo/Desktop/results.json")
 
-for i, ply in enumerate(val):                                                           
-    if ply['song_dirty']:
+for i, ply in enumerate(val):
+    if ply['song_dirty'] == 1:
         result[i]['songs'] = ply['songs']
-    if ply['tag_dirty']:
+    if ply['tag_dirty'] == 1:
         result[i]['tags'] = ply['tags']
 
-write_json(result, "1500_150/results.json")
+write_json(result, "mostpop/results.json")
 
 write_json(val, "val_1500_150_mostpop/val.json")
