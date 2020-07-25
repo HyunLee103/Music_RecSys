@@ -5,6 +5,7 @@ from title2rec import Title2Rec
 from arena_util import load_json, write_json, most_popular, remove_seen
 import math
 from tqdm import tqdm
+from mf_models import CF
 
 """
 case 1 : O O  ( mf or autoencoder)
@@ -71,9 +72,6 @@ def fill_X(train, val):
     
     return val
 
-
-
-
 if __name__ == '__main__':
 
     # paths
@@ -90,13 +88,24 @@ if __name__ == '__main__':
     test = load_json(test_path)
     song_meta = load_json(meta_path)
 
+    val_set = pd.DataFrame(val)
+    X_songs = val_set[val_set.songs.str.len() == 0].index
+    X_tags = val_set[val_set.tags.str.len() == 0].index
+    X_songs    
+    X_tags
+    val_set.__len__()
+    
+    XX = set(X_songs.append(X_tags))
     # custom grade
     song_const = 7.66
     tag_const = 3.9
 
     ## fill_X ( case2, case3, case4 )
-    val = fill_X(train, val)
+    val_fillX = fill_X(train, val)
 
+    ## for_O ( case1, case2, case3 )
+    mf = CF()
+    val_forO, _ = mf(mode='meta_mf')  # _ : test // mode = 'mf', X = "no_X"
 
 
 
