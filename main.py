@@ -91,11 +91,13 @@ if __name__ == '__main__':
     val_set = pd.DataFrame(val)
     X_songs = val_set[val_set.songs.str.len() == 0].index
     X_tags = val_set[val_set.tags.str.len() == 0].index
-    X_songs    
-    X_tags
-    val_set.__len__()
-    
-    XX = set(X_songs.append(X_tags))
+
+    # set index
+    XX = val_set[(val_set.songs.str.len() == 0) & (val_set.tags.str.len() == 0)].index # 1749
+    XO = val_set[(val_set.songs.str.len() == 0) & (val_set.tags.str.len() != 0)].index # 2630
+    OX = val_set[(val_set.songs.str.len() != 0) & (val_set.tags.str.len() == 0)].index # 9661
+    OO = val_set[(val_set.songs.str.len() != 0) & (val_set.tags.str.len() != 0)].index # 8975
+
     # custom grade
     song_const = 7.66
     tag_const = 3.9
@@ -103,9 +105,18 @@ if __name__ == '__main__':
     ## fill_X ( case2, case3, case4 )
     val_fillX = fill_X(train, val)
 
+    """
+    val_fillX 에서 받은 값에서 XO OX OO 중, X 만 가져오는 코드 필요
+    """
+
     ## for_O ( case1, case2, case3 )
     mf = CF()
     val_forO, _ = mf(mode='meta_mf')  # _ : test // mode = 'mf', X = "no_X"
 
-
-
+    """
+    val_forO에서 받은 값에서 OO, OX, XO 중 O 만 가져오는 코드 필요
+    """
+    
+    """
+    합쳐서 제출
+    """
