@@ -209,8 +209,7 @@ class CF:
         
             if self.plylst_test.loc[(self.n_train+pid),"song_dirty"] == 1:
                 cand_song = als_model.recommend(pid, test_songs_A, N=song_ntop+50, filter_already_liked_items=False)
-                #songs_already = self.orig_test[self.orig_test['id']== self.plylst_nid_id[self.n_train + pid]]['songs']
-                #cand_song = remove_seen(songs_already,cand_song)[:song_ntop]
+
 
             else:
                 cand_song = als_model.recommend(pid, test_songs_A, N=song_ntop, filter_already_liked_items=True)
@@ -260,7 +259,7 @@ class CF:
         print(f"Songs: {(correct_songs/ans_songs_num) * 100:.3}%")
         print(f"Tags: {(correct_tags/ans_tags_num) * 100 :.3}%")
 
-
+    
     def eval_dcg(self,res):
         print("Caculating dcg...")
         write_json(res,"results/results.json")
@@ -270,4 +269,4 @@ class CF:
 if __name__ == "__main__":
 
     model = CF()
-    res = model(mode = 'cf')
+    res = model(mode = 'mf')

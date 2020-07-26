@@ -102,21 +102,17 @@ if __name__ == '__main__':
     song_const = 7.66
     tag_const = 3.9
 
-    ## fill_X ( case2, case3, case4 )
+    ## fill_X
     val_fillX = fill_X(train, val)
 
-    """
-    val_fillX 에서 받은 값에서 XO OX OO 중, X 만 가져오는 코드 필요
-    """
+    val_fillX = val_fillX.loc[XX,:]
 
-    ## for_O ( case1, case2, case3 )
+    ## for_O
     mf = CF()
-    val_forO, _ = mf(mode='meta_mf')  # _ : test // mode = 'mf', X = "no_X"
+    val_forO, _ = mf(mode='multi_mf')  # _ : test // mode = 'mf', X = "no_X"
 
-    """
-    val_forO에서 받은 값에서 OO, OX, XO 중 O 만 가져오는 코드 필요
-    """
-    
-    """
-    합쳐서 제출
-    """
+    val_forO.drop(XX.index,inplace=True)
+
+    results = pd.concat([val_fillX,val_forO])
+
+
