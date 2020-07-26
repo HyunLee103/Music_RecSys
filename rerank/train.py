@@ -35,7 +35,7 @@ parser.add_argument("--mode", default="song", choices=["song", "tag"], type=str,
 args = parser.parse_args()
 
 if args.mode == 'tag':
-  full = mmread('tag_full.mtx')
+  full = mmread('rerank_tag_full.mtx')
   full = full.tocsc()
 
   ## Modeling
@@ -48,69 +48,61 @@ if args.mode == 'tag':
 
 
   full = full.T
-  X = full[0:73].T.todense()
+  X = full[0:64].T.todense()
   lst = list(range(115071))
 
 
   ## Training
-  for i in range(73,29703):
+  for i in range(64,512):
     tag = full[i]
     y = tag.data
 
     neg_1 = list(set(lst) - set(tag.indices))
-    k = round(len(y)*1.5)
+    k = round(len(y)*1)
     neg_idx = random.choices(neg_1, k=k)
 
     X_input = X[neg_idx+list(tag.indices), :]
 
     Y = np.concatenate((y, np.zeros(k)))
-    model_lgb = lgb.LGBMRegressor(n_estimators=500)
+    model_lgb = lgb.LGBMRanker(g)
 
     model_lgb.fit(X_input, Y)
 
     # lgb_train_pred = model_lgb.predict(X_input)
-    joblib.dump(model_lgb,'./tag_regression_2/{}_model'.format(tid2tag.get((i-73))))
-    print(i-73)
+    joblib.dump(model_lgb,'./tag_regression_4/{}_model'.format(tid2tag.get((i-64))))
+    print(i-64)
     # print(rmsle(Y, lgb_train_pred))   
 
 elif args.mode == 'song':
-  full = mmread('song_full.mtx')
+  full = mmread('rerank_song_last.mtx')
   full = full.tocsc()
-
-  ## Modeling
-  def rmsle(y, y_pred):
-    return np.sqrt(mean_squared_error(y, y_pred))
-
 
   file=open("sid2id","rb") 
   sid2id=pickle.load(file)
 
-
   full = full.T
-  X = full[0:73].T.todense()
-  lst = list(range(115071))
-
-
+  X = full[0:106].T.todense()
+  lst = list(range(117094))
+  
   ## Training
-  for i in range(73,145000):
+  for i in tqdm(range(106,20189)):
     song = full[i]
     y = song.data
 
-    neg_1 = list(set(lst) - set(song.indices))
-    k = round(len(y)*1.5)
-    neg_idx = random.choices(neg_1, k=k)
+    # neg_1 = list(set(lst) - set(song.indices))
+    # k = round(len(y)*1)
+    # neg_idx = random.choices(neg_1, k=k)
 
-    X_input = X[neg_idx+list(song.indices), :]
+    X_input = X[list(song.indices), :]
 
-    Y = np.concatenate((y, np.zeros(k)))
-    model_lgb = lgb.LGBMRegressor(n_estimators=300)
+    # Y = np.concatenate((y, np.zeros(k)))
+    model_lgb = lgb.LGBMRegressor(n_estimators=600)
 
-    model_lgb.fit(X_input, Y)
+    model_lgb.fit(X_input, y)
 
     # lgb_train_pred = model_lgb.predict(X_input)
-    joblib.dump(model_lgb,'./song_regression_2/{}_model'.format(sid2id.get((i-73))))
-    print(i-73)
+    joblib.dump(model_lgb,'./song_regression_last/{}_model'.format(sid2id.get((i-106))))
+    print(i-106)
     # print(rmsle(Y, lgb_train_pred))   
-
 
 
