@@ -89,7 +89,7 @@ class PlyEmbedding:
             except KeyError:
                 pass
         if out == []:
-            return False
+            return out
         else:
             return np.mean(out, axis=0)  
 
@@ -98,29 +98,30 @@ class PlyEmbedding:
         songs = ply['songs']
         tag_const = const
         vec = self.get_embed(songs)
-        similars = self.s2v.wv.similar_by_vector(vec, topn=150)
+        if vec != []:
+            similars = self.s2v.wv.similar_by_vector(vec, topn=150)
 
-        ID = [int(sim[0].split(" ")[0][1:-1]) for sim in similars]  # similars : 150
-        similar = [sim[1] for sim in similars]
+            ID = [int(sim[0].split(" ")[0][1:-1]) for sim in similars]  # similars : 150
+            similar = [sim[1] for sim in similars]
 
-        tmp_df = pd.DataFrame({'id':ID, 'similar':similar})
-        tmp_df = pd.merge(tmp_df, self.data_df[['id', 'tags']], how='left', on='id')
-        tmp_df['len'] = tmp_df['tags'].apply(len)
-        tmp_df['len'] = tmp_df['len'].cumsum().shift(1).fillna(0)
-        tmp_df = tmp_df[tmp_df['len'] < 150]
+            tmp_df = pd.DataFrame({'id':ID, 'similar':similar})
+            tmp_df = pd.merge(tmp_df, self.data_df[['id', 'tags']], how='left', on='id')
+            tmp_df['len'] = tmp_df['tags'].apply(len)
+            tmp_df['len'] = tmp_df['len'].cumsum().shift(1).fillna(0)
+            tmp_df = tmp_df[tmp_df['len'] < 150]
 
-        score_dict = {}
-        for sim, tags in zip(tmp_df['similar'], tmp_df['tags']):
-            for i, tag in enumerate(tags):
-                score = (-math.log(i+1, 2) + tag_const) * sim
-                try:
-                    score_dict[tag] += score
-                except KeyError:
-                    score_dict[tag] = score
+            score_dict = {}
+            for sim, tags in zip(tmp_df['similar'], tmp_df['tags']):
+                for i, tag in enumerate(tags):
+                    score = (-math.log(i+1, 2) + tag_const) * sim
+                    try:
+                        score_dict[tag] += score
+                    except KeyError:
+                        score_dict[tag] = score
 
-        pick = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)[:n]
-        res = [p[0] for p in pick]
-        score_res = [p[1] for p in pick]
+            pick = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)[:n]
+            res = [p[0] for p in pick]
+            score_res = [p[1] for p in pick]
 
         return res, score_res
 
