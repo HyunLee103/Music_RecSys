@@ -44,26 +44,24 @@ This is Arena official github style. I will follow this steps :)
 	python main.py
 
 ## Process
-### 1. CF, Sparse matrix 
+#### 1. CF, Sparse matrix 
 -  점수 rating(ply 담긴 순서) – 11만 x 63만 -> 500개(충분하게)
 - 평가지표 함수 nDCG의 역함수로 가중치 함수 모델링.
 - 최대값인 200(100 for val,test)까지 가중치가 1 미만으로 떨어지지 않게 조정. 
-- x : ply에 담긴 순서.
-
+- x : ply에 담긴 순서.  
 https://www.desmos.com/calculator/lrbcbfdqjr
 
 
   
-### 2. song, tags 채우기
+#### 2. song, tags 채우기
 - case 1 : O O  ( mf or autoencoder)
 - case 2 : O X  ( X : predict tag by song, O : mf )
 - case 3 : X O  ( X : predict song by tag, O : mf )
 - case 4 : X X  ( X : title2song, title2tag)
  
-*100곡(CF) + 400곡(random) -> 셔플 -> rerank -> 100곡 유지 
 
  
-### 3. Rerank 
+#### 3. Rerank 
 메타데이터 : Date, 장르, 가수, 플레이리스트 제목, tags, song 활용해서 부스팅으로 re-ranking  
 *re-ranking시 각 곡에 대한 Factorization machine으로 score 계산해보기
 - Data 분포에 따른 가중곱   
