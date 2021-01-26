@@ -54,24 +54,21 @@ https://www.desmos.com/calculator/lrbcbfdqjr
   
 #### 2. val, test : song, tags 빠진 것을 채워넣기
 
-2.1. title(x), song(O), tags(O) 4190 -> MF
-
-2.2. title(x), song(O), tags(x) 4507 -> ply 임배딩(song)/autoencoder -> 인접 ply tags rating -> MF 
-
-2.3. title(O) song(x), tags(O) 1232 -> title2song -> MF
-
-2.4. title(O) song(x), tags(x)  809(+2개는 다없음) -> title2tags, title2song -> MF
+- title(x), song(O), tags(O) 4190 -> MF
+- title(x), song(O), tags(x) 4507 -> ply 임배딩(song)/autoencoder -> 인접 ply tags rating -> MF 
+- title(O) song(x), tags(O) 1232 -> title2song -> MF
+- title(O) song(x), tags(x)  809(+2개는 다없음) -> title2tags, title2song -> MF
  
 *100곡(CF) + 400곡(random) -> 셔플 -> rerank -> 100곡 유지정도  
 
  
-### 3. Rerank 
+#### 3. Rerank 
 메타데이터 : Date, 장르, 가수, 플레이리스트 제목, tags, song 활용해서 부스팅으로 re-ranking
 *reranking시 각 곡에 대한 Factorization machine으로 score 계산해보기
-3.1. Date 분포에 따른 가중곱   
-3.2. Title(word2vec) -> 장르(word2vec)이랑 비교해서 그 장르에 해당하는 노래에 가중치  
-3.3. Train set으로 artist density(unique score) 임계값 정하고(상위 n%) 이를 넘으면 가중치 
-3.4. Ply title autoencoder  
+- Data 분포에 따른 가중곱   
+- Title(word2vec) -> 장르(word2vec)이랑 비교해서 그 장르에 해당하는 노래에 가중치  
+- Train set으로 artist density(unique score) 임계값 정하고(상위 n%) 이를 넘으면 가중치 
+- Ply title autoencoder  (title2rec.py)
 
  
 
