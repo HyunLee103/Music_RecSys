@@ -62,8 +62,7 @@ https://www.desmos.com/calculator/lrbcbfdqjr
 
  
 #### 3. Rerank 
-메타데이터 : Date, 장르, 가수, 플레이리스트 제목, tags, song 활용해서 부스팅으로 re-ranking  
-*re-ranking시 각 곡에 대한 Factorization machine으로 score 계산해보기
+메타데이터 : Date, 장르, 가수, 플레이리스트 제목, tags, song 활용해서 부스팅으로 re-ranking, 각 곡에 대한 Factorization machine으로 score 계산해보기
 - Data 분포에 따른 가중곱   
 - Title(word2vec) -> 장르(word2vec)이랑 비교해서 그 장르에 해당하는 노래에 가중치  
 - Train set으로 artist density(unique score) 임계값 정하고(상위 n%) 이를 넘으면 가중치 
