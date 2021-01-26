@@ -75,7 +75,7 @@ https://www.desmos.com/calculator/lrbcbfdqjr
 
 
 ## Contributor
-Hyun Lee(<https://github.com/HyunLee103>)
+Hyun Lee(<https://github.com/HyunLee103>)  
 Hyelin Nam(<https://github.com/HyelinNAM>)  
 Kyojung Koo(<https://github.com/koo616>)  
 Sanghyung Jung(<https://github.com/SangHyung-Jung>)  
