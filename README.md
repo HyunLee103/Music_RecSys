@@ -52,12 +52,11 @@ https://www.desmos.com/calculator/lrbcbfdqjr
 
 
   
-#### 2. val, test : song, tags 빠진 것을 채워넣기
-
-- title(x), song(O), tags(O) 4190 -> MF
-- title(x), song(O), tags(x) 4507 -> ply 임배딩(song)/autoencoder -> 인접 ply tags rating -> MF 
-- title(O) song(x), tags(O) 1232 -> title2song -> MF
-- title(O) song(x), tags(x)  809(+2개는 다없음) -> title2tags, title2song -> MF
+#### 2. song, tags 빠진 것을 채워넣기
+- case 1 : O O  ( mf or autoencoder)
+- case 2 : O X  ( X : predict tag by song, O : mf )
+- case 3 : X O  ( X : predict song by tag, O : mf )
+- case 4 : X X  ( X : title2song, title2tag)
  
 *100곡(CF) + 400곡(random) -> 셔플 -> rerank -> 100곡 유지정도  
 
