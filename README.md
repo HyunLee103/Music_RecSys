@@ -46,7 +46,9 @@ This is Arena official github style. I will follow this steps :)
 ## Process
 #### 1. CF, Sparse matrix -> 점수 rating(ply 담긴 순서) – 11만 x 63만 -> 500개(충분하게)
 
-평가지표 함수 nDCG의 역함수로 가중치 함수 모델링, 최대값인 200(100 for val,test)까지 가중치가 1 미만으로 떨어지지 않게 조정. x : ply에 담긴 순서 
+- 평가지표 함수 nDCG의 역함수로 가중치 함수 모델링, 
+- 최대값인 200(100 for val,test)까지 가중치가 1 미만으로 떨어지지 않게 조정. 
+- x : ply에 담긴 순서 
 
 https://www.desmos.com/calculator/lrbcbfdqjr
 
@@ -62,7 +64,7 @@ https://www.desmos.com/calculator/lrbcbfdqjr
 
  
 #### 3. Rerank 
-메타데이터 : Date, 장르, 가수, 플레이리스트 제목, tags, song 활용해서 부스팅으로 re-ranking
+메타데이터 : Date, 장르, 가수, 플레이리스트 제목, tags, song 활용해서 부스팅으로 re-ranking  
 *reranking시 각 곡에 대한 Factorization machine으로 score 계산해보기
 - Data 분포에 따른 가중곱   
 - Title(word2vec) -> 장르(word2vec)이랑 비교해서 그 장르에 해당하는 노래에 가중치  
