@@ -41,7 +41,7 @@ This is Arena official github style. I will follow this steps :)
 - gensim  
 
 ## Usage
-	python main.py
+	!python main.py
 
 ## Process
 #### 1. CF, Sparse matrix 
